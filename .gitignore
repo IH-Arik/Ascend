@@ -1,3 +1,6 @@
+# Ignored Projects / Folders
+wellness-backend/
+
 # Environment & Secrets
 .env
 .env.*
