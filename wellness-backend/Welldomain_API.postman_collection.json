@@ -1,0 +1,4837 @@
+{
+  "info": {
+    "_postman_id": "welldomain-api-v2",
+    "name": "Welldomain API",
+    "description": "Postman collection for the current Welldomain backend. Base URL defaults to http://localhost:8000. Auth flow: register -> verify email -> login -> use {{access_token}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkin_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "action_log_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "member_user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "organization_name",
+      "value": "Dominion Corp",
+      "type": "string"
+    },
+    {
+      "key": "department",
+      "value": "Engineering",
+      "type": "string"
+    },
+    {
+      "key": "team",
+      "value": "Backend",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Arik Hassan\",\n  \"email\": \"arik@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"organization_name\": \"{{organization_name}}\",\n  \"role\": \"Manager\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"arik@example.com\",\n  \"code\": \"4821\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/verify-email",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "verify-email"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data) {",
+                  "  pm.collectionVariables.set('access_token', res.data.access_token);",
+                  "  pm.collectionVariables.set('refresh_token', res.data.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"arik@example.com\",\n  \"password\": \"SecurePass123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data) {",
+                  "  pm.collectionVariables.set('access_token', res.data.access_token);",
+                  "  pm.collectionVariables.set('refresh_token', res.data.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"arik@example.com\",\n  \"password\": \"SecurePass123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/leader-login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "leader-login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data) {",
+                  "  pm.collectionVariables.set('access_token', res.data.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"arik@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lead@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/leader-forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "leader-forgot-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Resend Reset Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lead@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/leader-resend-reset-code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "leader-resend-reset-code"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify Reset Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"arik@example.com\",\n  \"code\": \"7392\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/verify-reset-code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "verify-reset-code"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Verify Reset Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lead@example.com\",\n  \"code\": \"7392\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/leader-verify-reset-code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "leader-verify-reset-code"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"arik@example.com\",\n  \"code\": \"7392\",\n  \"new_password\": \"NewSecurePass456!\",\n  \"confirm_password\": \"NewSecurePass456!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lead@example.com\",\n  \"code\": \"7392\",\n  \"new_password\": \"NewSecurePass456!\",\n  \"confirm_password\": \"NewSecurePass456!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/leader-reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "leader-reset-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/superadmin-forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "superadmin-forgot-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Resend Reset Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/superadmin-resend-reset-code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "superadmin-resend-reset-code"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Verify Reset Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@example.com\",\n  \"code\": \"7392\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/superadmin-verify-reset-code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "superadmin-verify-reset-code"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@example.com\",\n  \"code\": \"7392\",\n  \"new_password\": \"NewSecurePass456!\",\n  \"confirm_password\": \"NewSecurePass456!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/superadmin-reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "superadmin-reset-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meta",
+      "item": [
+        {
+          "name": "Organizations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/meta/organizations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "organizations"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/meta/roles?organization_name={{organization_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "roles"
+              ],
+              "query": [
+                {
+                  "key": "organization_name",
+                  "value": "{{organization_name}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Departments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/meta/departments?organization_name={{organization_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "departments"
+              ],
+              "query": [
+                {
+                  "key": "organization_name",
+                  "value": "{{organization_name}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Teams",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/meta/teams?organization_name={{organization_name}}&department={{department}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "teams"
+              ],
+              "query": [
+                {
+                  "key": "organization_name",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Me",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Arik Hassan Updated\",\n  \"organization_name\": \"{{organization_name}}\",\n  \"role\": \"Senior Manager\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Onboarding",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_name\": \"{{organization_name}}\",\n  \"role\": \"Senior Manager\",\n  \"onboarding_completed\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/onboarding",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "onboarding"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create My Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Arik Hassan\",\n  \"age\": 28,\n  \"gender\": \"Male\",\n  \"company\": \"{{organization_name}}\",\n  \"department\": \"{{department}}\",\n  \"team\": \"{{team}}\",\n  \"role\": \"Manager\",\n  \"height_cm\": 175,\n  \"weight_kg\": 72,\n  \"profile_image_url\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"department\": \"Product\",\n  \"team\": \"Growth\",\n  \"weight_kg\": 70.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Profile Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/profile-image",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "profile-image"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Account Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me/account-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "account-summary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"SecurePass123!\",\n  \"new_password\": \"SecurePass789!\",\n  \"confirm_password\": \"SecurePass789!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/change-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "change-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Support Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"issue\": \"I need help with team dashboard access.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/me/support-request",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "support-request"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete My Account",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Help Center",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/help-center",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "help-center"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Privacy Policy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/privacy-policy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "privacy-policy"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Terms Of Condition",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/terms-of-condition",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "terms-of-condition"
+              ]
+            }
+          }
+        },
+        {
+          "name": "About Us",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/about-us",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "about-us"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Questions",
+      "item": [
+        {
+          "name": "List Legacy Questions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/questions?page=1&size=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "questions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assessments",
+      "item": [
+        {
+          "name": "Submit Baseline Assessment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data && res.data.checkin && res.data.checkin.id) {",
+                  "  pm.collectionVariables.set('checkin_id', res.data.checkin.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    { \"question_id\": \"q01\", \"answer\": \"High\" },\n    { \"question_id\": \"q02\", \"answer\": \"Good\" },\n    { \"question_id\": \"q03\", \"answer\": \"Rarely\" },\n    { \"question_id\": \"q04\", \"answer\": \"Stable\" },\n    { \"question_id\": \"q05\", \"answer\": \"Confident\" },\n    { \"question_id\": \"q06\", \"answer\": \"High\" },\n    { \"question_id\": \"q07\", \"answer\": \"Good\" },\n    { \"question_id\": \"q08\", \"answer\": \"Rested\" },\n    { \"question_id\": \"q09\", \"answer\": \"Very\" },\n    { \"question_id\": \"q10\", \"answer\": \"Very Good\" },\n    { \"question_id\": \"q11\", \"answer\": \"7-8H\" },\n    { \"question_id\": \"q12\", \"answer\": \"Often\" },\n    { \"question_id\": \"q13\", \"answer\": \"Consistent\" },\n    { \"question_id\": \"q14\", \"answer\": \"Often\" },\n    { \"question_id\": \"q15\", \"answer\": \"Rarely\" },\n    { \"question_id\": \"q16\", \"answer\": \"Often\" },\n    { \"question_id\": \"q17\", \"answer\": \"Good\" },\n    { \"question_id\": \"q18\", \"answer\": \"Sometimes\" },\n    { \"question_id\": \"q19\", \"answer\": \"Often\" },\n    { \"question_id\": \"q20\", \"answer\": \"Moderate\" },\n    { \"question_id\": \"q21\", \"answer\": \"Manageable\" },\n    { \"question_id\": \"q22\", \"answer\": \"Very\" },\n    { \"question_id\": \"q23\", \"answer\": \"Often\" },\n    { \"question_id\": \"q24\", \"answer\": \"Connected\" },\n    { \"question_id\": \"q25\", \"answer\": \"Moderate\" }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/assessments/checkins",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "assessments",
+                "checkins"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Assessment Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/assessments/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "assessments",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/assessments/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "assessments",
+                "status"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Daily Check-Ins",
+      "item": [
+        {
+          "name": "List Daily Questions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/daily-checkins/questions?page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "daily-checkins",
+                "questions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit Daily Check-In",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    { \"question_id\": \"dc_1\", \"answer\": \"Moderate\" },\n    { \"question_id\": \"dc_2\", \"answer\": \"6-7\" },\n    { \"question_id\": \"dc_3\", \"answer\": \"Moderate\" },\n    { \"question_id\": \"dc_4\", \"answer\": \"Good\" },\n    { \"question_id\": \"dc_5\", \"answer\": \"7-8\" },\n    { \"question_id\": \"dc_6\", \"answer\": \"Good\" }\n  ],\n  \"behaviors\": [\n    \"physical_activity\",\n    \"recovery_practice\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/daily-checkins",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "daily-checkins"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Today Intervention",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/daily-checkins/intervention",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "daily-checkins",
+                "intervention"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Record Intervention Response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/daily-checkins/intervention/response",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "daily-checkins",
+                "intervention",
+                "response"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Weekly Check-Ins",
+      "item": [
+        {
+          "name": "List Weekly Questions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/weekly-checkins/questions?page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "weekly-checkins",
+                "questions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Weekly Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/weekly-checkins/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "weekly-checkins",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit Weekly Check-In",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    { \"question_id\": \"wc_1\", \"answer\": \"Good\" },\n    { \"question_id\": \"wc_2\", \"answer\": \"Good\" },\n    { \"question_id\": \"wc_3\", \"answer\": \"Moderate\" },\n    { \"question_id\": \"wc_4\", \"answer\": \"Often\" },\n    { \"question_id\": \"wc_5\", \"answer\": \"Often\" },\n    { \"question_id\": \"wc_6\", \"answer\": \"Sometimes\" },\n    { \"question_id\": \"wc_7\", \"answer\": \"Often\" },\n    { \"question_id\": \"wc_8\", \"answer\": \"Manageable\" }\n  ],\n  \"behaviors\": [\n    \"gratitude_reflection\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/weekly-checkins",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "weekly-checkins"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Monthly Check-Ins",
+      "item": [
+        {
+          "name": "List Monthly Questions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/monthly-checkins/questions?page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "monthly-checkins",
+                "questions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Monthly Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monthly-checkins/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "monthly-checkins",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit Monthly Check-In",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    { \"question_id\": \"mc_1\", \"answer\": \"Good\" },\n    { \"question_id\": \"mc_2\", \"answer\": \"Good\" },\n    { \"question_id\": \"mc_3\", \"answer\": \"Recovering well\" },\n    { \"question_id\": \"mc_4\", \"answer\": \"Low\" },\n    { \"question_id\": \"mc_5\", \"answer\": \"Strong\" },\n    { \"question_id\": \"mc_6\", \"answer\": \"Usually\" },\n    { \"question_id\": \"mc_7\", \"answer\": \"Consistent\" },\n    { \"question_id\": \"mc_8\", \"answer\": \"High\" },\n    { \"question_id\": \"mc_9\", \"answer\": \"Aligned\" },\n    { \"question_id\": \"mc_10\", \"answer\": \"Manageable\" },\n    { \"question_id\": \"mc_11\", \"answer\": \"Supported\" },\n    { \"question_id\": \"mc_12\", \"answer\": \"Valued\" }\n  ],\n  \"behaviors\": [\n    \"intentional_sleep_routine\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/monthly-checkins",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "monthly-checkins"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scores",
+      "item": [
+        {
+          "name": "Latest Score",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/scores/latest",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "scores",
+                "latest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Score History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/scores/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "scores",
+                "history"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Score By Check-In ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/scores/{{checkin_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "scores",
+                "{{checkin_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Home Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/home",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "home"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Progress",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "progress"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Streaks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/streaks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "streaks"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/recommendations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "recommendations"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Performance Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/report?week=all&month=4&year=2026",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "report"
+              ],
+              "query": [
+                {
+                  "key": "week",
+                  "value": "all"
+                },
+                {
+                  "key": "month",
+                  "value": "4"
+                },
+                {
+                  "key": "year",
+                  "value": "2026"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Team Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/team?department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "team"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader?department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/members?department={{department}}&team={{team}}&query=&risk_filter=all&sort_by=performance&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "members"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "risk_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "performance"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader AI Insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/insights?department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "insights"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/report?department={{department}}&team={{team}}&range=30d&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "report"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Member Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/members/{{member_user_id}}?department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "members",
+                "{{member_user_id}}"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/alerts?department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "alerts"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Burnout Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/burnout-recommendations?department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "burnout-recommendations"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Burnout Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/burnout-details?department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "burnout-details"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader OPS Trend",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/ops-trend?department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "ops-trend"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/settings?department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "settings"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Team Action Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"Reduce workload intensity for the next 3 days\",\n  \"risk_key\": \"recovery_deficit\",\n  \"note\": \"Started after elevated fatigue alert.\",\n  \"selected_from_recommended\": true,\n  \"department\": \"{{department}}\",\n  \"team\": \"{{team}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/team/actions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "team",
+                "actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Leader Action Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"Reduce workload intensity for the next 3 days\",\n  \"risk_key\": \"recovery_deficit\",\n  \"note\": \"Started after elevated fatigue alert.\",\n  \"selected_from_recommended\": true,\n  \"department\": \"{{department}}\",\n  \"team\": \"{{team}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/actions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Team Action Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/team/actions?department={{department}}&team={{team}}&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "team",
+                "actions"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Leader Action Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/actions?department={{department}}&team={{team}}&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "actions"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leader Action History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/actions/history?department={{department}}&team={{team}}&range=30d&outcome=all&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "actions",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                },
+                {
+                  "key": "outcome",
+                  "value": "all"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Organizations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/organizations?query=&risk_filter=all&sort_by=performance&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "organizations"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "risk_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "performance"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Company Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/organizations/{{organization_name}}?query=&risk_filter=all&sort_by=performance&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "organizations",
+                "{{organization_name}}"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "risk_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "performance"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Company Member Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/organizations/{{organization_name}}/members/{{member_user_id}}?range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "organizations",
+                "{{organization_name}}",
+                "members",
+                "{{member_user_id}}"
+              ],
+              "query": [
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/users?query=&status_filter=all&sort_by=company&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "status_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "company"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin User Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/users/{{member_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "users",
+                "{{member_user_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Superadmin User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jordan Smith\",\n  \"role\": \"Jr. Executive\",\n  \"organization_name\": \"{{organization_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/users/{{member_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "users",
+                "{{member_user_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Deactivate Superadmin User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/users/{{member_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "users",
+                "{{member_user_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/members?company={{organization_name}}&department={{department}}&team={{team}}&query=&risk_filter=all&sort_by=performance&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "members"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "risk_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "performance"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Member Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/members/{{member_user_id}}?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "members",
+                "{{member_user_id}}"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin AI Insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/insights?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "insights"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/report?company={{organization_name}}&department={{department}}&team={{team}}&range=30d&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "report"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/audit-logs?company={{organization_name}}&query=&time_filter=today&user_filter=all&status_filter=all&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "time_filter",
+                  "value": "today"
+                },
+                {
+                  "key": "user_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "status_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Audit Log Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/audit-logs/{{action_log_id}}?company={{organization_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "audit-logs",
+                "{{action_log_id}}"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/alerts?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "alerts"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Burnout Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/burnout-recommendations?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "burnout-recommendations"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Burnout Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/burnout-details?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "burnout-details"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Settings Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Change Password Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/change-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "change-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Forgot Password Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "forgot-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Verify Reset Code Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/verify-reset-code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "verify-reset-code"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Privacy Policy",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/privacy-policy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "privacy-policy"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Superadmin Privacy Policy",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Privacy Policy\",\n  \"content\": \"Updated privacy policy content managed by superadmin.\",\n  \"image_url\": \"https://example.com/privacy-banner.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/privacy-policy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "privacy-policy"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Terms and Conditions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/terms-and-conditions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "terms-and-conditions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Superadmin Terms and Conditions",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Terms & Conditions\",\n  \"content\": \"Updated terms and conditions content managed by superadmin.\",\n  \"image_url\": \"https://example.com/terms-banner.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/terms-and-conditions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "terms-and-conditions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin About Us",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/about-us",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "about-us"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Superadmin About Us",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"About Us\",\n  \"content\": \"Updated about us content managed by superadmin.\",\n  \"image_url\": \"https://example.com/about-banner.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/about-us",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "about-us"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Superadmin Settings Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alex Rivera\",\n  \"email\": \"superadmin@example.com\",\n  \"role\": \"Super Admin\",\n  \"contact_number\": \"+1 222 333 4444\",\n  \"employee_id\": \"SA-1001\",\n  \"profile_image_url\": \"https://example.com/superadmin-profile.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Superadmin Settings Company",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"{{organization_name}}\",\n  \"company_address\": \"123 SaaS Street, Suite 400, San Francisco, CA 94103\",\n  \"company_logo_url\": \"https://example.com/company-logo.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/company",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "company"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Superadmin Settings Scope",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"team\": \"{{team}}\",\n  \"department\": \"{{department}}\",\n  \"role\": \"Super Admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/scope",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "scope"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Leader Settings Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"role\": \"CEO\",\n  \"contact_number\": \"+1 265 665 2266\",\n  \"employee_id\": \"555 5959\",\n  \"profile_image_url\": \"https://example.com/profile.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/settings/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "settings",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Leader Settings Company",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"MasterPlan LLC\",\n  \"company_address\": \"123 SaaS Street, Suite 400, San Francisco, CA 94103\",\n  \"company_logo_url\": \"https://example.com/company-logo.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/settings/company",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "settings",
+                "company"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Leader Settings Scope",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"team\": \"Alpha Team\",\n  \"department\": \"Engineering\",\n  \"role\": \"CEO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/settings/scope",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "settings",
+                "scope"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Leader Dashboard Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leader/settings?department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "leader",
+                "settings"
+              ],
+              "query": [
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Insights",
+      "item": [
+        {
+          "name": "Latest Insight",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/insights/latest",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "insights",
+                "latest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate Insight",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force_refresh\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/insights/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "insights",
+                "generate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Chat With Assistant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Why is my stress score low and what should I do next?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/insights/chat",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "insights",
+                "chat"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Chat Greeting",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/insights/chat/greeting",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "insights",
+                "chat",
+                "greeting"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Chat Suggestions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/insights/chat/suggestions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "insights",
+                "chat",
+                "suggestions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Chat History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/insights/chat/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "insights",
+                "chat",
+                "history"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Superadmin Dashboard",
+      "item": [
+        {
+          "name": "Superadmin Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin?company={{organization_name}}&department={{department}}&team={{team}}&range=30d&start_date=&end_date=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                },
+                {
+                  "key": "start_date",
+                  "value": ""
+                },
+                {
+                  "key": "end_date",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Organizations List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/organizations?query=&risk_filter=all&sort_by=risk_desc&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "organizations"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "risk_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "risk_desc"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Organization Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/organizations/{{organization_name}}?query=&risk_filter=all&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "organizations",
+                "{{organization_name}}"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "risk_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/users?query=&status_filter=all&sort_by=company&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "status_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "company"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/users/{{member_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "users",
+                "{{member_user_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User Role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/users/{{member_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "users",
+                "{{member_user_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"leader\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/users/{{member_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "users",
+                "{{member_user_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Members (Legacy)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/members?company={{organization_name}}&department={{department}}&team={{team}}&query=&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "members"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Member Analysis",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/members/{{member_user_id}}?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "members",
+                "{{member_user_id}}"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "AI Insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/insights?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "insights"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/report?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "report"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "All Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/audit-logs?company={{organization_name}}&query=&time_filter=today&status_filter=all&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "query",
+                  "value": ""
+                },
+                {
+                  "key": "time_filter",
+                  "value": "today"
+                },
+                {
+                  "key": "status_filter",
+                  "value": "all"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Audit Log Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/audit-logs/{{action_log_id}}?company={{organization_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "audit-logs",
+                "{{action_log_id}}"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Alerts & Risks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/alerts?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "alerts"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Burnout Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/burnout-recommendations?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "burnout-recommendations"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Burnout Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/burnout-details?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "burnout-details"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "OPS Trend",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/ops-trend?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "ops-trend"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Settings Metadata",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings?company={{organization_name}}&department={{department}}&team={{team}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Settings Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Super\",\n  \"last_name\": \"Admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Settings Update Company",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/company",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "company"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company\": \"Dominion Corp\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Settings Update Scope",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/settings/scope",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "settings",
+                "scope"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"Global\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Superadmin Action History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/actions/history?company={{organization_name}}&department={{department}}&team={{team}}&range=30d&outcome=all&page=1&page_size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard",
+                "superadmin",
+                "actions",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "company",
+                  "value": "{{organization_name}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                },
+                {
+                  "key": "team",
+                  "value": "{{team}}"
+                },
+                {
+                  "key": "range",
+                  "value": "30d"
+                },
+                {
+                  "key": "outcome",
+                  "value": "all"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Alerts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/alerts?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "path": [
+                "dashboard",
+                "superadmin",
+                "alerts"
+              ],
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Superadmin Burnout Recommendations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/burnout-recommendations?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "path": [
+                "dashboard",
+                "superadmin",
+                "burnout-recommendations"
+              ],
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Superadmin Burnout Details",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dashboard/superadmin/burnout-details?company={{organization_name}}&department={{department}}&team={{team}}&range=30d",
+              "path": [
+                "dashboard",
+                "superadmin",
+                "burnout-details"
+              ],
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Questions",
+      "item": [
+        {
+          "name": "List All Questions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/questions?page=1&size=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "questions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Returns onboarding assessment questions paginated as 5 questions per page."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assessments",
+      "item": [
+        {
+          "name": "Get Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assessments/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assessments",
+                "status"
+              ]
+            },
+            "description": "Returns the 90-day reassessment eligibility for the authenticated user."
+          }
+        },
+        {
+          "name": "Submit Assessment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"question_id\": \"1\",\n      \"answer\": \"High\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/assessments/checkins",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assessments",
+                "checkins"
+              ]
+            },
+            "description": "Submits the 25-question baseline assessment."
+          }
+        }
+      ]
+    }
+  ]
+}

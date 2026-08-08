@@ -1,0 +1,50 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.env
+env/
+venv/
+.venv/
+ENV/
+env.bak
+
+# Documentation
+docs/
+*.docs
+
+# Word & Office Files
+*.docx
+*.doc
+~$*.docx
+~$*.doc
+
+# Python & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Logs & Temp
+*.log
+logs/
+uvicorn.log
+scratch/
+tmp/
+temp/
+
+# IDE & Operating System
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

@@ -1,0 +1,246 @@
+"""Medical record upload service (DOCX section 8.8, Medical Records Upload
+and Health History Support).
+
+Access is deliberately restricted to the record owner, PT/IM, and Admin -
+the DOCX is explicit: "The SCS should not receive unrestricted raw medical
+records by default." SCS and the other support pathways (Nutrition, Mental
+Performance, Chaplain) can only ever receive PT/IM-approved *performance
+summaries* per the DOCX, which this backend does not yet generate - so for
+now they simply have no access to raw uploads at all, rather than a
+half-built summary path that doesn't really enforce "minimum necessary."
+
+Every upload and every subsequent view/download/review writes an append-
+only `MedicalRecordAccessEvent`, matching the DOCX's "audit logging for
+every upload/view/download/export" requirement.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import HTTPException, UploadFile, status
+
+from app.core.notification_rules import scan_for_opsec_terms
+from app.core.roles import ROLE_ADMIN, ROLE_PTIM
+from app.core.security import utc_now
+from app.core.support_pathways import get_support_pathway
+from app.models.medical_record import MedicalRecord, MedicalRecordAccessEvent
+from app.models.team_assignment import TeamAssignment
+from app.models.user import User
+from app.schemas.medical_record import DOCUMENT_TYPES, MIN_ACCESS_REASON_LENGTH
+from app.services.file_storage_service import FileStorageService, scan_file_stub
+from app.services.notification_service import NotificationService
+
+FILE_TYPE_BY_EXTENSION = {
+    ".pdf": "pdf",
+    ".dcm": "dicom",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".png": "image",
+    ".heic": "image",
+}
+
+VIEW_ALLOWED_ROLES = {ROLE_PTIM, ROLE_ADMIN}
+
+
+class MedicalRecordService:
+    """Upload, list, view, and review medical records."""
+
+    def __init__(self) -> None:
+        self.storage = FileStorageService()
+        self.notification_service = NotificationService()
+
+    async def upload(
+        self, user: User, document_type: str, access_reason: str, file: UploadFile
+    ) -> dict[str, Any]:
+        """Upload a new medical record (controlled copy, not a system of record)."""
+        if document_type not in DOCUMENT_TYPES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown document type.")
+        access_reason = access_reason.strip()
+        if len(access_reason) < MIN_ACCESS_REASON_LENGTH:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Access-reason must be at least {MIN_ACCESS_REASON_LENGTH} characters.",
+            )
+        if not scan_file_stub(file.filename or ""):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This file type is not allowed.",
+            )
+
+        content = await file.read()
+        from app.core.config import get_settings
+
+        max_bytes = get_settings().medical_record_max_bytes
+        if len(content) > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File exceeds the {max_bytes // (1024 * 1024)} MB limit.",
+            )
+
+        file_name = file.filename or "upload"
+        extension = "." + file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+        file_type = FILE_TYPE_BY_EXTENSION.get(extension, "other")
+        storage_path = self.storage.save_file(str(user.id), file_name, content)
+
+        record = MedicalRecord(
+            user_id=user.id,
+            document_type=document_type,
+            file_name=file_name,
+            file_type=file_type,
+            file_size_bytes=len(content),
+            storage_path=storage_path,
+            access_reason=access_reason,
+            uploaded_by=user.id,
+        )
+        await record.insert()
+
+        await self._log_event(record.id, user.id, user.role, "upload", access_reason)
+
+        opsec_terms = scan_for_opsec_terms(access_reason)
+        scan_note = (
+            f"Scan flagged terms: {', '.join(opsec_terms)}."
+            if opsec_terms
+            else "Scan complete - no OPSEC keywords detected - routed to PT/IM queue."
+        )
+        await self._log_event(record.id, None, "system", "opsec_scan", scan_note)
+
+        await self._notify_assigned_ptim(user, record)
+
+        return await self._serialize_detail(record)
+
+    async def list_for_user(
+        self, user: User, document_type_filter: str | None, search: str | None
+    ) -> dict[str, Any]:
+        """Return the user's own uploaded records, optionally filtered."""
+        records = await MedicalRecord.find(MedicalRecord.user_id == user.id).to_list()
+        if document_type_filter and document_type_filter != "all":
+            records = [r for r in records if r.document_type == document_type_filter]
+        if search:
+            needle = search.lower()
+            records = [r for r in records if needle in r.file_name.lower()]
+        records.sort(key=lambda item: item.uploaded_at, reverse=True)
+        return {"records": [self._serialize_list_item(r) for r in records]}
+
+    async def get_detail(self, user: User, record_id: str) -> dict[str, Any]:
+        """Return a record's full detail + access log, logging this view."""
+        record = await self._get_viewable(user, record_id)
+        if user.id != record.user_id:
+            await self._log_event(record.id, user.id, user.role, "view_record", "Opened record for review")
+        return await self._serialize_detail(record)
+
+    async def get_file(self, user: User, record_id: str) -> tuple[bytes, str]:
+        """Return decrypted file bytes + filename, logging this download."""
+        record = await self._get_viewable(user, record_id)
+        await self._log_event(record.id, user.id, user.role, "download", "Downloaded file")
+        return self.storage.read_file(record.storage_path), record.file_name
+
+    async def review(self, reviewer: User, record_id: str, note: str) -> dict[str, Any]:
+        """PT/IM or Admin marks a record reviewed."""
+        if reviewer.role not in VIEW_ALLOWED_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only PT/IM or Admin can review medical records.",
+            )
+        record = await MedicalRecord.get(record_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found.")
+
+        record.status = "reviewed"
+        record.reviewed_by = reviewer.id
+        record.reviewed_at = utc_now()
+        await record.save()
+
+        await self._log_event(record.id, reviewer.id, reviewer.role, "review", note)
+        return await self._serialize_detail(record)
+
+    async def _get_viewable(self, user: User, record_id: str) -> MedicalRecord:
+        """Return a record if the user is its owner or an authorized reviewer."""
+        record = await MedicalRecord.get(record_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found.")
+        if user.id != record.user_id and user.role not in VIEW_ALLOWED_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this record.",
+            )
+        return record
+
+    async def _notify_assigned_ptim(self, user: User, record: MedicalRecord) -> None:
+        """Notify the user's assigned PT/IM that a new record is pending review."""
+        pathway = get_support_pathway("PT/IM")
+        if pathway is None or pathway["role"] is None:
+            return
+        assignment = await TeamAssignment.find_one(
+            TeamAssignment.user_id == user.id, TeamAssignment.pathway_key == "PT/IM"
+        )
+        if assignment is None or assignment.provider_user_id is None:
+            return
+        await self.notification_service.notify(
+            assignment.provider_user_id,
+            family="medical_record_review_and_governance_notices",
+            title=f"New medical record pending review ({user.full_name or user.email})",
+            body=f"{record.document_type.title()}: {record.file_name}",
+            related_entity_type="medical_record",
+            related_entity_id=str(record.id),
+        )
+
+    async def _log_event(
+        self, record_id: Any, actor_id: Any, actor_role: str, action: str, note: str
+    ) -> None:
+        """Append one access/action event to a record's audit trail."""
+        event = MedicalRecordAccessEvent(
+            record_id=record_id, actor_id=actor_id, actor_role=actor_role, action=action, note=note
+        )
+        await event.insert()
+
+    def _serialize_list_item(self, record: MedicalRecord) -> dict[str, Any]:
+        """Convert a record to its list-view transport-safe dict."""
+        return {
+            "id": str(record.id),
+            "document_type": record.document_type,
+            "file_name": record.file_name,
+            "file_type": record.file_type,
+            "file_size_bytes": record.file_size_bytes,
+            "status": record.status,
+            "access_reason": record.access_reason,
+            "uploaded_at": record.uploaded_at.isoformat(),
+            "reviewed_at": record.reviewed_at.isoformat() if record.reviewed_at else None,
+        }
+
+    async def _serialize_detail(self, record: MedicalRecord) -> dict[str, Any]:
+        """Convert a record to its full-detail transport-safe dict, including the access log."""
+        uploader = await User.get(record.uploaded_by)
+        reviewer = await User.get(record.reviewed_by) if record.reviewed_by else None
+        events = await MedicalRecordAccessEvent.find(
+            MedicalRecordAccessEvent.record_id == record.id
+        ).to_list()
+        events.sort(key=lambda item: item.created_at)
+
+        access_log = []
+        for event in events:
+            actor = await User.get(event.actor_id) if event.actor_id else None
+            access_log.append(
+                {
+                    "actor_name": actor.full_name if actor else "system",
+                    "actor_role": event.actor_role,
+                    "action": event.action,
+                    "note": event.note,
+                    "created_at": event.created_at.isoformat(),
+                }
+            )
+
+        return {
+            "id": str(record.id),
+            "document_type": record.document_type,
+            "file_name": record.file_name,
+            "file_type": record.file_type,
+            "file_size_bytes": record.file_size_bytes,
+            "status": record.status,
+            "access_reason": record.access_reason,
+            "uploaded_by_name": uploader.full_name if uploader else None,
+            "uploaded_at": record.uploaded_at.isoformat(),
+            "reviewed_by_name": reviewer.full_name if reviewer else None,
+            "reviewed_at": record.reviewed_at.isoformat() if record.reviewed_at else None,
+            "access_log": access_log,
+        }

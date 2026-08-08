@@ -1,0 +1,366 @@
+"""Authentication service for Ascend."""
+
+from datetime import timedelta
+import logging
+import secrets
+from typing import Any
+
+from fastapi import HTTPException, status
+
+from app.core.config import get_settings
+from app.core.roles import normalize_role
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    get_password_hash,
+    utc_now,
+    verify_password,
+)
+from app.models.user import User
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    AuthScreenConfigResponse,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    ResendVerificationCodeRequest,
+    ResetPasswordRequest,
+    UserResponse,
+    VerifyEmailRequest,
+    VerifyResetCodeRequest,
+)
+from app.services.audit_log_service import AuditLogService
+
+CODE_EXPIRY_MINUTES = 10
+REMEMBER_ME_REFRESH_MULTIPLIER = 2
+logger = logging.getLogger(__name__)
+
+
+class AuthService:
+    """Service for user registration, authentication, and recovery."""
+
+    def __init__(self) -> None:
+        self.audit_log_service = AuditLogService()
+
+    async def register_user(self, payload: RegisterRequest) -> dict[str, Any]:
+        """Register a user and issue auth tokens."""
+        existing_user = await User.find_one({"email": payload.email.lower()})
+        verification_code = self._generate_code()
+        expires_at = utc_now() + timedelta(minutes=CODE_EXPIRY_MINUTES)
+
+        if existing_user is not None and existing_user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="An account with this email already exists.",
+            )
+
+        if existing_user is not None:
+            existing_user.full_name = payload.full_name
+            existing_user.role = normalize_role(payload.role)
+            existing_user.is_active = True
+            existing_user.is_verified = False
+            existing_user.hashed_password = get_password_hash(payload.password)
+            existing_user.onboarding_completed = False
+            existing_user.email_verification_code = verification_code
+            existing_user.email_verification_expires_at = expires_at
+            existing_user.password_reset_code = None
+            existing_user.password_reset_expires_at = None
+            existing_user.activation_date = utc_now()
+            existing_user.deactivation_date = None
+            existing_user.updated_at = utc_now()
+            await existing_user.save()
+            user = existing_user
+        else:
+            user = User(
+                email=payload.email.lower(),
+                full_name=payload.full_name,
+                role=normalize_role(payload.role),
+                hashed_password=get_password_hash(payload.password),
+                email_verification_code=verification_code,
+                email_verification_expires_at=expires_at,
+                activation_date=utc_now(),
+            )
+            await user.insert()
+
+        self._log_delivery_code("verification", user.email, verification_code)
+        return self._build_token_response(user)
+
+    async def login_user(
+        self,
+        payload: LoginRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict[str, Any]:
+        """Authenticate a user and return issued tokens."""
+        user = await self._authenticate_user(payload, ip_address, user_agent)
+        user.last_login_at = utc_now()
+        user.updated_at = utc_now()
+        await user.save()
+        await self.audit_log_service.record(
+            event_type="login_success",
+            actor_id=user.id,
+            actor_role=user.role,
+            target_entity_type="user",
+            target_entity_id=str(user.id),
+            summary_message="Successful login.",
+            metadata_payload={
+                "method": "password",
+                "ip_address": ip_address,
+                "user_agent": user_agent,
+            },
+        )
+        return self._build_token_response(user, remember_me=payload.remember_me)
+
+    async def refresh_token(self, payload: RefreshRequest) -> dict[str, Any]:
+        """Issue a new access token from a valid refresh token."""
+        try:
+            token_payload = decode_token(payload.refresh_token)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token.",
+            ) from exc
+
+        if token_payload.get("token_type") != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token.",
+            )
+
+        user = await User.get(token_payload.get("sub"))
+        if user is None or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found.",
+            )
+
+        return self._build_token_response(user, refresh_token=payload.refresh_token)
+
+    async def verify_email(self, payload: VerifyEmailRequest) -> dict[str, Any]:
+        """Verify a user email with the stored code."""
+        user = await User.find_one({"email": payload.email.lower()})
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found.",
+            )
+
+        if user.email_verification_code != payload.code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification code.",
+            )
+
+        if self._is_code_expired(user.email_verification_expires_at):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verification code has expired.",
+            )
+
+        user.is_verified = True
+        user.email_verification_code = None
+        user.email_verification_expires_at = None
+        user.updated_at = utc_now()
+        await user.save()
+        return {"user": self._serialize_user(user)}
+
+    async def resend_verification_code(
+        self,
+        payload: ResendVerificationCodeRequest,
+    ) -> dict[str, Any]:
+        """Regenerate a verification code if the account exists and is unverified."""
+        user = await User.find_one({"email": payload.email.lower()})
+        if user is None or not user.is_active or user.is_verified:
+            return {}
+
+        verification_code = self._generate_code()
+        user.email_verification_code = verification_code
+        user.email_verification_expires_at = utc_now() + timedelta(
+            minutes=CODE_EXPIRY_MINUTES
+        )
+        user.updated_at = utc_now()
+        await user.save()
+        self._log_delivery_code("verification-resend", user.email, verification_code)
+        return {}
+
+    async def forgot_password(self, payload: ForgotPasswordRequest) -> dict[str, Any]:
+        """Create and log a reset code without leaking account existence."""
+        user = await User.find_one({"email": payload.email.lower()})
+        if user is None or not user.is_active:
+            return {}
+
+        reset_code = self._generate_code()
+        user.password_reset_code = reset_code
+        user.password_reset_expires_at = utc_now() + timedelta(minutes=CODE_EXPIRY_MINUTES)
+        user.updated_at = utc_now()
+        await user.save()
+        self._log_delivery_code("password-reset", user.email, reset_code)
+        return {}
+
+    async def verify_reset_code(
+        self,
+        payload: VerifyResetCodeRequest,
+    ) -> dict[str, Any]:
+        """Verify that a password reset code is valid."""
+        user = await User.find_one({"email": payload.email.lower()})
+        if user is None or user.password_reset_code != payload.code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid reset code.",
+            )
+
+        if self._is_code_expired(user.password_reset_expires_at):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reset code has expired.",
+            )
+
+        return {}
+
+    async def reset_password(self, payload: ResetPasswordRequest) -> dict[str, Any]:
+        """Reset a user password after code validation."""
+        if payload.new_password != payload.confirm_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Passwords do not match.",
+            )
+
+        user = await User.find_one({"email": payload.email.lower()})
+        if user is None or user.password_reset_code != payload.code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid reset code.",
+            )
+
+        if self._is_code_expired(user.password_reset_expires_at):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reset code has expired.",
+            )
+
+        user.hashed_password = get_password_hash(payload.new_password)
+        user.password_reset_code = None
+        user.password_reset_expires_at = None
+        user.updated_at = utc_now()
+        await user.save()
+        return {}
+
+    async def get_me(self, user: User) -> dict[str, Any]:
+        """Return the current authenticated user payload."""
+        return self._serialize_user(user)
+
+    async def get_auth_screen_config(self) -> dict[str, Any]:
+        """Return frontend-facing config for the login and recovery screen."""
+        settings = get_settings()
+        payload = AuthScreenConfigResponse(
+            support_email=settings.support_email or None,
+            support_phone=settings.support_phone or None,
+            help_center_url=settings.help_center_url or None,
+            terms_of_use_url=settings.terms_of_use_url or None,
+            privacy_policy_url=settings.privacy_policy_url or None,
+            opsec_notice_text=settings.opsec_notice_text or None,
+        )
+        return payload.model_dump(mode="json")
+
+    async def _authenticate_user(
+        self,
+        payload: LoginRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> User:
+        """Return the authenticated active user."""
+        user = await User.find_one({"email": payload.email.lower()})
+        if user is None:
+            # No real user to attribute a failed-login audit entry to - not logged.
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password.",
+            )
+        if not verify_password(payload.password, user.hashed_password):
+            await self.audit_log_service.record(
+                event_type="login_failed",
+                actor_id=user.id,
+                actor_role=user.role,
+                target_entity_type="user",
+                target_entity_id=str(user.id),
+                summary_message="Failed login attempt (invalid password).",
+                metadata_payload={
+                    "method": "password",
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
+                },
+                outcome_status="failure",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password.",
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account is inactive.",
+            )
+
+        return user
+
+    def _build_token_response(
+        self,
+        user: User,
+        refresh_token: str | None = None,
+        remember_me: bool = False,
+    ) -> dict[str, Any]:
+        """Return auth tokens and a safe user payload."""
+        settings = get_settings()
+        refresh_expire_minutes = settings.refresh_token_expire_minutes
+        if remember_me:
+            refresh_expire_minutes *= REMEMBER_ME_REFRESH_MULTIPLIER
+
+        return {
+            "access_token": create_access_token(str(user.id)),
+            "refresh_token": refresh_token
+            or create_refresh_token(
+                str(user.id),
+                expires_minutes=refresh_expire_minutes,
+            ),
+            "token_type": "bearer",
+            "remember_me": remember_me,
+            "user": self._serialize_user(user),
+        }
+
+    def _serialize_user(self, user: User) -> dict[str, Any]:
+        """Serialize a user for API responses."""
+        payload = UserResponse(
+            id=str(user.id),
+            email=user.email,
+            full_name=user.full_name,
+            role=user.role,
+            is_active=user.is_active,
+            is_verified=user.is_verified,
+            onboarding_completed=user.onboarding_completed,
+            onboarding_status=user.onboarding_status,
+            onboarding_step=user.onboarding_step,
+            day0_daily_checkin_status=user.day0_daily_checkin_status,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            last_login_at=user.last_login_at,
+        )
+        return payload.model_dump(mode="json")
+
+    def _generate_code(self) -> str:
+        """Generate a 4-digit verification code."""
+        return f"{secrets.randbelow(10000):04d}"
+
+    def _is_code_expired(self, expires_at) -> bool:
+        """Return whether a stored code has expired."""
+        return expires_at is None or expires_at <= utc_now()
+
+    def _log_delivery_code(self, code_type: str, email: str, code: str) -> None:
+        """Log auth codes until Gmail delivery is wired."""
+        logger.info(
+            "Ascend %s code generated for %s. Code: %s",
+            code_type,
+            email,
+            code,
+        )
