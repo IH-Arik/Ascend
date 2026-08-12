@@ -33,3 +33,9 @@ class ProviderAssignRequest(BaseModel):
 
     pathway_key: str
     provider_user_id: str
+
+
+class AdminDeactivationRequest(BaseModel):
+    """Admin requests deactivation of a provider/admin-level account (second-reviewer gated)."""
+
+    reason: str | None = Field(default=None, max_length=500)

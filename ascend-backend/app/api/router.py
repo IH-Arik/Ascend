@@ -7,6 +7,7 @@ from app.modules.ai_insights.routes import router as ai_insights_router
 from app.modules.assessments.routes import router as assessments_router
 from app.modules.auth.routes import router as auth_router
 from app.modules.checkins.routes import router as checkins_router
+from app.modules.dashboard.routes import router as provider_dashboard_router
 from app.modules.dashboards.routes import router as dashboards_router
 from app.modules.health.routes import router as health_router
 from app.modules.messaging.routes import router as messaging_router
@@ -28,6 +29,7 @@ api_router.include_router(ai_insights_router, prefix="/ai-insights", tags=["ai-i
 api_router.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])
 api_router.include_router(checkins_router, prefix="/checkins", tags=["checkins"])
 api_router.include_router(dashboards_router, prefix="/dashboards", tags=["dashboards"])
+api_router.include_router(provider_dashboard_router, prefix="/dashboard", tags=["provider-dashboard"])
 api_router.include_router(recommendations_router, prefix="/recommendations", tags=["recommendations"])
 api_router.include_router(support_router, prefix="/support", tags=["support"])
 api_router.include_router(notifications_router, prefix="/notifications", tags=["notifications"])

@@ -28,10 +28,14 @@ from app.core.notification_rules import get_category
 from app.core.notification_rules import scan_for_opsec_terms
 from app.models.notification import Notification
 from app.models.user import User
+from app.services.email_service import EmailService
 
 
 class NotificationService:
     """Create and manage in-app notifications for a user."""
+
+    def __init__(self) -> None:
+        self.email_service = EmailService()
 
     async def notify(
         self,
@@ -42,8 +46,16 @@ class NotificationService:
         body: str,
         related_entity_type: str | None = None,
         related_entity_id: str | None = None,
+        send_email: bool = False,
     ) -> Notification:
-        """Screen, create, and persist a notification."""
+        """Screen, create, and persist a notification.
+
+        `send_email`, when True, additionally sends a real email via
+        `EmailService` to the user's real address - not instead of the
+        in-app notification, on top of it. Used only for the highest-stakes
+        call site (Level-5 safety-boundary flags); every other call site
+        keeps in-app-only behavior, unchanged.
+        """
         if family not in NOTIFICATION_FAMILIES:
             raise ValueError(f"Unknown notification family: {family}")
 
@@ -66,6 +78,12 @@ class NotificationService:
             related_entity_id=related_entity_id,
         )
         await record.insert()
+
+        if send_email:
+            recipient = await User.get(user_id)
+            if recipient is not None and recipient.email:
+                await self.email_service.send(recipient.email, title, f"<p>{body}</p>")
+
         return record
 
     async def exists_since(

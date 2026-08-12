@@ -28,7 +28,11 @@ SEVERITY_TO_ROUTE_LEVEL = {"moderate": "L2", "high": "L4"}
 from app.models.recommendation import Recommendation
 from app.models.user import User
 from app.schemas.recommendation import AssignActionRequest
+from app.services.audit_log_service import AuditLogService
 from app.services.notification_service import NotificationService
+from app.services.recommendation_threshold_config_service import (
+    RecommendationThresholdConfigService,
+)
 
 SEVERITY_RANK = {"moderate": 1, "high": 2, "assigned": 3}
 
@@ -38,6 +42,8 @@ class RecommendationService:
 
     def __init__(self) -> None:
         self.notification_service = NotificationService()
+        self.audit_log_service = AuditLogService()
+        self.threshold_config_service = RecommendationThresholdConfigService()
 
     async def evaluate_and_generate(
         self,
@@ -47,7 +53,11 @@ class RecommendationService:
     ) -> dict[str, Any] | None:
         """Evaluate today's scores and create a new recommendation if triggered."""
         previous_component_scores = previous_component_scores or {}
-        candidate = self._pick_candidate(component_scores, previous_component_scores)
+        active_thresholds = await self.threshold_config_service.get_active_thresholds()
+        high_threshold, moderate_threshold = active_thresholds or (HIGH_THRESHOLD, MODERATE_THRESHOLD)
+        candidate = self._pick_candidate(
+            component_scores, previous_component_scores, high_threshold, moderate_threshold
+        )
         if candidate is None:
             return None
 
@@ -71,7 +81,7 @@ class RecommendationService:
         if rule is None:
             return None
         copy = rule[severity]
-        threshold_level = HIGH_THRESHOLD if severity == "high" else MODERATE_THRESHOLD
+        threshold_level = high_threshold if severity == "high" else moderate_threshold
         trigger_reason = (
             f"{component} score {score:.0f} is below {threshold_level:.0f}"
             + (" (repeated across two check-ins)." if severity == "moderate" else ".")
@@ -109,6 +119,7 @@ class RecommendationService:
         user: User,
         payload: AssignActionRequest,
         assigned_by: Any,
+        assigned_by_role: str = "",
     ) -> dict[str, Any]:
         """Assign a provider-authored action (the "Assigned action" screen)."""
         if payload.readiness_component not in COMPONENT_PRIORITY_ORDER:
@@ -155,6 +166,17 @@ class RecommendationService:
             related_entity_type="recommendation",
             related_entity_id=str(record.id),
         )
+        # Closes a real, previously-unimplemented gap: `docs/AUDIT_LOG_RULES.md`
+        # explicitly requires auditing "recommendation assignment or override".
+        await self.audit_log_service.record(
+            event_type="recommendation_assigned",
+            actor_id=assigned_by,
+            actor_role=assigned_by_role,
+            target_entity_type="recommendation",
+            target_entity_id=str(record.id),
+            summary_message=f"Assigned action '{record.title}' to {user.email}.",
+            metadata_payload={"readiness_component": payload.readiness_component},
+        )
         return self._serialize(record)
 
     async def get_by_id(self, user: User, recommendation_id: str) -> dict[str, Any]:
@@ -190,6 +212,14 @@ class RecommendationService:
         record.status = "dismissed"
         record.updated_at = utc_now()
         await record.save()
+        await self.audit_log_service.record(
+            event_type="recommendation_dismissed",
+            actor_id=user.id,
+            actor_role=user.role,
+            target_entity_type="recommendation",
+            target_entity_id=str(record.id),
+            summary_message=f"Dismissed recommendation '{record.title}'.",
+        )
         return self._serialize(record)
 
     async def complete(self, user: User, recommendation_id: str) -> dict[str, Any]:
@@ -198,6 +228,14 @@ class RecommendationService:
         record.status = "completed"
         record.updated_at = utc_now()
         await record.save()
+        await self.audit_log_service.record(
+            event_type="recommendation_completed",
+            actor_id=user.id,
+            actor_role=user.role,
+            target_entity_type="recommendation",
+            target_entity_id=str(record.id),
+            summary_message=f"Completed recommendation '{record.title}'.",
+        )
         return self._serialize(record)
 
     async def _get_owned(self, user: User, recommendation_id: str) -> Recommendation:
@@ -223,6 +261,8 @@ class RecommendationService:
         self,
         component_scores: dict[str, float | None],
         previous_component_scores: dict[str, float | None],
+        high_threshold: float = HIGH_THRESHOLD,
+        moderate_threshold: float = MODERATE_THRESHOLD,
     ) -> tuple[str, str, float] | None:
         """Return the single worst-triggering (component, severity, score) or None."""
         triggered: list[tuple[str, str, float]] = []
@@ -230,11 +270,11 @@ class RecommendationService:
             score = component_scores.get(component)
             if score is None:
                 continue
-            if score < HIGH_THRESHOLD:
+            if score < high_threshold:
                 triggered.append((component, "high", score))
                 continue
             previous_score = previous_component_scores.get(component)
-            if score < MODERATE_THRESHOLD and previous_score is not None and previous_score < MODERATE_THRESHOLD:
+            if score < moderate_threshold and previous_score is not None and previous_score < moderate_threshold:
                 triggered.append((component, "moderate", score))
 
         if not triggered:

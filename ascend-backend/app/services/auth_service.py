@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import HTTPException, status
 
 from app.core.config import get_settings
-from app.core.roles import normalize_role
+from app.core.roles import ROLE_SUPERADMIN, normalize_role
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -34,6 +34,9 @@ from app.services.audit_log_service import AuditLogService
 
 CODE_EXPIRY_MINUTES = 10
 REMEMBER_ME_REFRESH_MULTIPLIER = 2
+# Not DOCX-sourced (see `app/models/user.py`) - own reasonable default,
+# the DOCX does not specify an access-review cadence.
+ACCESS_EXPIRY_DAYS = 365
 logger = logging.getLogger(__name__)
 
 
@@ -55,9 +58,11 @@ class AuthService:
                 detail="An account with this email already exists.",
             )
 
+        resolved_role = self._resolve_role(payload)
+
         if existing_user is not None:
             existing_user.full_name = payload.full_name
-            existing_user.role = normalize_role(payload.role)
+            existing_user.role = resolved_role
             existing_user.is_active = True
             existing_user.is_verified = False
             existing_user.hashed_password = get_password_hash(payload.password)
@@ -68,6 +73,7 @@ class AuthService:
             existing_user.password_reset_expires_at = None
             existing_user.activation_date = utc_now()
             existing_user.deactivation_date = None
+            existing_user.access_expires_at = utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS)
             existing_user.updated_at = utc_now()
             await existing_user.save()
             user = existing_user
@@ -75,16 +81,32 @@ class AuthService:
             user = User(
                 email=payload.email.lower(),
                 full_name=payload.full_name,
-                role=normalize_role(payload.role),
+                role=resolved_role,
                 hashed_password=get_password_hash(payload.password),
                 email_verification_code=verification_code,
                 email_verification_expires_at=expires_at,
                 activation_date=utc_now(),
+                access_expires_at=utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS),
             )
             await user.insert()
 
         self._log_delivery_code("verification", user.email, verification_code)
         return self._build_token_response(user)
+
+    def _resolve_role(self, payload: RegisterRequest) -> str:
+        """Return the role to assign at registration.
+
+        The only Superadmin bootstrap path in this project: if
+        `SUPERADMIN_EMAIL` is set and the registering email matches it
+        (case-insensitively), the account gets `DWS Superadmin` regardless
+        of the role requested in the payload - documented in
+        `.env.example`/`UPDATE.MD`, not a hidden backdoor. Every other
+        email is normalized as before.
+        """
+        settings = get_settings()
+        if settings.superadmin_email and payload.email.lower() == settings.superadmin_email.lower():
+            return ROLE_SUPERADMIN
+        return normalize_role(payload.role)
 
     async def login_user(
         self,

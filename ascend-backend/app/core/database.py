@@ -13,22 +13,31 @@ from app.models import AppSetting
 from app.models import AIInsight
 from app.models import Assessment
 from app.models import AuditLog
+from app.models import Briefing
 from app.models import CheckinAnswer
 from app.models import CoverageLog
 from app.models import DeactivationRequest
 from app.models import EmergencyContactConfig
 from app.models import EquipmentGap
+from app.models import LeadershipAnnotation
 from app.models import MedicalRecord
 from app.models import MedicalRecordAccessEvent
 from app.models import Message
+from app.models import MessageThread
 from app.models import Notification
 from app.models import OFTRecord
 from app.models import OnboardingAnswer
 from app.models import OpsSnapshot
+from app.models import OrgUnit
+from app.models import PendingConfirmation
 from app.models import ProviderCredential
 from app.models import ReconditioningPlan
 from app.models import Recommendation
+from app.models import RecommendationThresholdConfig
 from app.models import ReportExport
+from app.models import RoleScopeConfig
+from app.models import ScheduledExport
+from app.models import SchedulerJobRun
 from app.models import ScoringConfig
 from app.models import SupportRequest
 from app.models import TeamAssignment
@@ -94,6 +103,15 @@ async def init_db() -> None:
                 CoverageLog,
                 ScoringConfig,
                 ReportExport,
+                PendingConfirmation,
+                SchedulerJobRun,
+                OrgUnit,
+                RoleScopeConfig,
+                ScheduledExport,
+                RecommendationThresholdConfig,
+                MessageThread,
+                LeadershipAnnotation,
+                Briefing,
             ],
         )
     except PyMongoError:

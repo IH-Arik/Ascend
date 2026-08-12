@@ -3,24 +3,45 @@ specialists, teams, units, reporting groups, and support pathways.").
 
 Every role change and manual provider assignment is audit logged -
 previously nothing in this backend recorded role changes at all.
+
+`change_role` is the one place the Admin/Superadmin split is actually
+enforced: promoting a user to an admin-level role, or demoting a user who
+currently holds one, requires the caller to be `ROLE_SUPERADMIN`
+specifically - a plain Admin gets 403. Every other role change (Airman /
+SCS / PT-IM / specialist / Leadership / IDMT) stays available to both, same
+as before this pass.
+
+Admin-level role changes additionally go through the second-reviewer
+confirmation queue (`AdminConfirmationService`) instead of applying
+immediately - see `app/models/pending_confirmation.py` for why. The
+Superadmin-only check below decides who may *request* the change; a
+different Admin/Superadmin must then approve it before it takes effect.
 """
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
 
-from app.core.roles import SUPPORTED_ROLES, normalize_role
+from app.core.roles import ADMIN_ROLES, ROLE_SUPERADMIN, SUPPORTED_ROLES, normalize_role
 from app.core.security import utc_now
 from app.core.support_pathways import get_support_pathway
+from app.services.auth_service import ACCESS_EXPIRY_DAYS
 from app.models.team_assignment import TeamAssignment
 from app.models.user import User
 from app.schemas.admin_user import ProviderAssignRequest, RoleChangeRequest, UnitAssignRequest
+from app.services.admin_confirmation_service import AdminConfirmationService
 from app.services.audit_log_service import AuditLogService
 
 STATUS_ENABLED = "enabled"
 STATUS_LOCKED_ON = "locked_on"
+# Not DOCX-sourced (a Figma "System" screen's "Deactivation grace: 14 days,
+# applies to: Inactive accounts" claim triggered this) - a real inactivity
+# surface, not a confirmation-expiry rule (the screen's own "applies to"
+# column says accounts, not pending deactivations).
+INACTIVITY_GRACE_DAYS = 14
 
 
 class AdminUserService:
@@ -28,6 +49,7 @@ class AdminUserService:
 
     def __init__(self) -> None:
         self.audit_log_service = AuditLogService()
+        self.admin_confirmation_service = AdminConfirmationService()
 
     async def list_users(self, role_filter: str | None = None) -> dict[str, Any]:
         """Return every user, optionally filtered by role."""
@@ -37,6 +59,30 @@ class AdminUserService:
             users = await User.find().to_list()
         users.sort(key=lambda item: item.email)
         return {"users": [self._serialize(u) for u in users]}
+
+    async def list_inactive_accounts(self, grace_days: int = INACTIVITY_GRACE_DAYS) -> list[dict[str, Any]]:
+        """Return real active accounts that have gone quiet for at least `grace_days`.
+
+        Not DOCX-sourced (see `INACTIVITY_GRACE_DAYS`). An account with a
+        real `last_login_at` older than the cutoff, or one that has never
+        logged in but was activated before the cutoff, both count - a
+        brand-new account (activated within the grace window) never does,
+        even if it hasn't logged in yet. Filtered in Python, not `==`/`<=`
+        in the query - this project's established Beanie boolean/`None`
+        query-gotcha precedent (see `TeamService._find_active_provider`).
+        """
+        cutoff = utc_now() - timedelta(days=grace_days)
+        all_users = await User.find().to_list()
+        inactive = []
+        for user in all_users:
+            if not user.is_active:
+                continue
+            if user.last_login_at is not None:
+                if user.last_login_at <= cutoff:
+                    inactive.append(user)
+            elif user.activation_date is not None and user.activation_date <= cutoff:
+                inactive.append(user)
+        return [self._serialize(u) for u in inactive]
 
     async def change_role(self, admin: User, user_id: str, payload: RoleChangeRequest) -> dict[str, Any]:
         """Admin changes a user's role. Audit logged."""
@@ -51,6 +97,24 @@ class AdminUserService:
             )
 
         old_role = target.role
+        touches_admin_level = new_role in ADMIN_ROLES or old_role in ADMIN_ROLES
+        if touches_admin_level and admin.role != ROLE_SUPERADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only a Superadmin can grant or remove an admin-level role.",
+            )
+
+        if touches_admin_level:
+            confirmation = await self.admin_confirmation_service.request_role_change(
+                admin, target, old_role, new_role
+            )
+            return {
+                "status": "pending_approval",
+                "confirmation_id": str(confirmation.id),
+                "target_summary": confirmation.target_summary,
+                "consequence_summary": confirmation.consequence_summary,
+            }
+
         target.role = new_role
         target.updated_at = utc_now()
         await target.save()
@@ -63,6 +127,35 @@ class AdminUserService:
             target_entity_id=str(target.id),
             summary_message=f"Role changed from {old_role} to {new_role}.",
             metadata_payload={"old_role": old_role, "new_role": new_role},
+        )
+        return self._serialize(target)
+
+    async def renew_access(self, admin: User, user_id: str) -> dict[str, Any]:
+        """Admin manually extends a user's `access_expires_at` by `ACCESS_EXPIRY_DAYS`. Audit logged.
+
+        Not DOCX-sourced (see `app/models/user.py`) - a real, manually-
+        triggered action, not silent automatic renewal.
+        """
+        target = await User.get(user_id)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+        previous_expiry = target.access_expires_at
+        target.access_expires_at = utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS)
+        target.updated_at = utc_now()
+        await target.save()
+
+        await self.audit_log_service.record(
+            event_type="access_renewed",
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_entity_type="user",
+            target_entity_id=str(target.id),
+            summary_message=f"Access renewed for {target.email}.",
+            metadata_payload={
+                "previous_expiry": previous_expiry.isoformat() if previous_expiry else None,
+                "new_expiry": target.access_expires_at.isoformat(),
+            },
         )
         return self._serialize(target)
 
@@ -144,4 +237,5 @@ class AdminUserService:
             "unit_id": user.unit_id,
             "is_active": user.is_active,
             "is_verified": user.is_verified,
+            "access_expires_at": user.access_expires_at.isoformat() if user.access_expires_at else None,
         }

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = Field(default="/api/v1", alias="API_V1_PREFIX")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     secret_key: str = Field(default="change-me", alias="SECRET_KEY")
+    superadmin_email: str = Field(default="", alias="SUPERADMIN_EMAIL")
     access_token_expire_minutes: int = Field(
         default=60,
         alias="ACCESS_TOKEN_EXPIRE_MINUTES",
@@ -50,6 +51,12 @@ class Settings(BaseSettings):
     medical_record_max_bytes: int = Field(
         default=50 * 1024 * 1024, alias="MEDICAL_RECORD_MAX_BYTES"
     )
+    resend_api_key: str = Field(default="", alias="RESEND_API_KEY")
+    resend_from_address: str = Field(default="onboarding@resend.dev", alias="RESEND_FROM_ADDRESS")
+    twilio_account_sid: str = Field(default="", alias="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: str = Field(default="", alias="TWILIO_AUTH_TOKEN")
+    twilio_from_number: str = Field(default="", alias="TWILIO_FROM_NUMBER")
+    fcm_server_key: str = Field(default="", alias="FCM_SERVER_KEY")
     opsec_notice_text: str = Field(
         default=(
             "Protect sensitive readiness, mission, and personal information. "

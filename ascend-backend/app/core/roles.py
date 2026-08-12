@@ -5,18 +5,50 @@ from typing import Final
 ROLE_AIRMAN: Final[str] = "Airman"
 ROLE_SCS: Final[str] = "SCS"
 ROLE_PTIM: Final[str] = "PT/IM"
+ROLE_NUTRITIONIST: Final[str] = "Nutritionist"
+ROLE_MENTAL_PERFORMANCE: Final[str] = "Mental Performance"
+ROLE_CHAPLAIN: Final[str] = "Chaplain"
 ROLE_LEADERSHIP: Final[str] = "Leadership"
 ROLE_IDMT: Final[str] = "IDMT"
 ROLE_ADMIN: Final[str] = "DWS Admin"
+ROLE_SUPERADMIN: Final[str] = "DWS Superadmin"
 
 SUPPORTED_ROLES: Final[tuple[str, ...]] = (
     ROLE_AIRMAN,
     ROLE_SCS,
     ROLE_PTIM,
+    ROLE_NUTRITIONIST,
+    ROLE_MENTAL_PERFORMANCE,
+    ROLE_CHAPLAIN,
     ROLE_LEADERSHIP,
     ROLE_IDMT,
     ROLE_ADMIN,
+    ROLE_SUPERADMIN,
 )
+
+# Superadmin has every Admin permission plus admin-account management -
+# `ADMIN_ROLES` is the single source of truth wherever "has admin-level
+# access" is being checked (route gates), while the narrower
+# "can create/demote an Admin" check stays Superadmin-only inside
+# `AdminUserService.change_role`.
+ADMIN_ROLES: Final[tuple[str, ...]] = (ROLE_ADMIN, ROLE_SUPERADMIN)
+
+# The 3 specialist support-pathway roles - previously `role: None` in
+# `app/core/support_pathways.py` ("not yet formal system roles"). Now real,
+# so My Support Team auto-assignment and the Specialist Dashboard can gate
+# on them like SCS/PT-IM already do.
+SPECIALIST_ROLES: Final[tuple[str, ...]] = (
+    ROLE_NUTRITIONIST,
+    ROLE_MENTAL_PERFORMANCE,
+    ROLE_CHAPLAIN,
+)
+
+_SPECIALIST_PERMISSIONS: Final[list[str]] = [
+    "view_assigned_users",
+    "view_relevant_readiness_component",
+    "coordinate_with_scs",
+    "view_authorized_medical_summaries",
+]
 
 ROLE_PERMISSIONS: Final[dict[str, list[str]]] = {
     ROLE_AIRMAN: [
@@ -43,6 +75,9 @@ ROLE_PERMISSIONS: Final[dict[str, list[str]]] = {
         "view_authorized_medical_summaries",
         "coordinate_with_scs",
     ],
+    ROLE_NUTRITIONIST: list(_SPECIALIST_PERMISSIONS),
+    ROLE_MENTAL_PERFORMANCE: list(_SPECIALIST_PERMISSIONS),
+    ROLE_CHAPLAIN: list(_SPECIALIST_PERMISSIONS),
     ROLE_LEADERSHIP: [
         "view_aggregate_dashboards",
         "view_reporting_trends",
@@ -62,6 +97,47 @@ ROLE_PERMISSIONS: Final[dict[str, list[str]]] = {
         "view_audit_logs",
         "view_compliance_trackers",
     ],
+    ROLE_SUPERADMIN: [
+        "manage_accounts",
+        "manage_roles",
+        "manage_teams",
+        "manage_permissions",
+        "manage_exports",
+        "manage_support_operations",
+        "view_audit_logs",
+        "view_compliance_trackers",
+        "manage_admin_accounts",
+    ],
+}
+
+
+# Not DOCX-sourced - a "Roles & RBAC" admin screen (Figma) groups roles into
+# clusters and color-codes them by scope. Roles were flat strings before
+# this; this is our own reasonable classification, not a DOCX requirement.
+ROLE_CLUSTER: Final[dict[str, str]] = {
+    ROLE_AIRMAN: "Mobile",
+    ROLE_SCS: "Staff",
+    ROLE_PTIM: "Staff",
+    ROLE_NUTRITIONIST: "Staff",
+    ROLE_MENTAL_PERFORMANCE: "Staff",
+    ROLE_CHAPLAIN: "Staff",
+    ROLE_LEADERSHIP: "Aggregate",
+    ROLE_ADMIN: "Control",
+    ROLE_SUPERADMIN: "Control",
+    ROLE_IDMT: "Secure",
+}
+
+ROLE_SCOPE: Final[dict[str, str]] = {
+    ROLE_AIRMAN: "Self",
+    ROLE_SCS: "Flight",
+    ROLE_PTIM: "Caseload",
+    ROLE_NUTRITIONIST: "Caseload",
+    ROLE_MENTAL_PERFORMANCE: "Opt-in",
+    ROLE_CHAPLAIN: "Opt-in",
+    ROLE_LEADERSHIP: "Wing (k>=5)",
+    ROLE_ADMIN: "Global",
+    ROLE_SUPERADMIN: "Global",
+    ROLE_IDMT: "Handoff",
 }
 
 
@@ -79,6 +155,14 @@ def normalize_role(role: str | None) -> str:
         "pt": ROLE_PTIM,
         "injury manager": ROLE_PTIM,
         "physical therapist": ROLE_PTIM,
+        "nutritionist": ROLE_NUTRITIONIST,
+        "nutrition": ROLE_NUTRITIONIST,
+        "performance nutrition": ROLE_NUTRITIONIST,
+        "mental performance": ROLE_MENTAL_PERFORMANCE,
+        "mental performance / behavioral": ROLE_MENTAL_PERFORMANCE,
+        "chaplain": ROLE_CHAPLAIN,
+        "purpose coach": ROLE_CHAPLAIN,
+        "spiritual readiness coach": ROLE_CHAPLAIN,
         "leadership": ROLE_LEADERSHIP,
         "hpo manager": ROLE_LEADERSHIP,
         "leadership/hpo manager": ROLE_LEADERSHIP,
@@ -87,6 +171,9 @@ def normalize_role(role: str | None) -> str:
         "admin": ROLE_ADMIN,
         "contract manager": ROLE_ADMIN,
         "dws admin / contract manager": ROLE_ADMIN,
+        "dws superadmin": ROLE_SUPERADMIN,
+        "superadmin": ROLE_SUPERADMIN,
+        "super admin": ROLE_SUPERADMIN,
     }
     return aliases.get(value, role or "")
 

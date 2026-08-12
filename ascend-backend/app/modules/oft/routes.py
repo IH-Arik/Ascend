@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
-from app.core.roles import ROLE_ADMIN, ROLE_SCS
+from app.core.roles import ADMIN_ROLES, ROLE_SCS
 from app.models.user import User
 from app.schemas.oft import OFTRecordResultRequest, OFTScheduleRequest
 from app.services.oft_service import OFTService
@@ -36,7 +36,7 @@ async def get_my_oft_status(
 async def schedule_oft(
     user_id: str,
     payload: OFTScheduleRequest,
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_SCS)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
 ) -> dict[str, Any]:
     """Schedule an upcoming OFT test for a user (SCS/Admin only)."""
     target_user = await _get_target_user(user_id)
@@ -48,7 +48,7 @@ async def schedule_oft(
 async def record_oft_result(
     user_id: str,
     payload: OFTRecordResultRequest,
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_SCS)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
 ) -> dict[str, Any]:
     """Record a completed OFT test result for a user (SCS/Admin only)."""
     target_user = await _get_target_user(user_id)

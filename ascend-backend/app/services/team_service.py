@@ -103,11 +103,12 @@ class TeamService:
             TeamAssignment.user_id == user.id, TeamAssignment.pathway_key == pathway["key"]
         )
         if existing is not None:
-            if (
-                pathway["always_available"]
-                and existing.provider_user_id is None
-                and pathway["role"] is not None
-            ):
+            if existing.provider_user_id is None and pathway["role"] is not None:
+                # Not gated to `always_available` - an optional pathway's
+                # assignment record can predate its role becoming real (as
+                # happened when Nutritionist/Mental Performance/Chaplain
+                # were added), so every pathway retries here, not just the
+                # 2 locked-on ones.
                 provider = await self._find_active_provider(pathway["role"])
                 if provider is not None:
                     existing.provider_user_id = provider.id
@@ -116,7 +117,7 @@ class TeamService:
             return existing
 
         provider_user_id = None
-        if pathway["always_available"] and pathway["role"] is not None:
+        if pathway["role"] is not None:
             provider = await self._find_active_provider(pathway["role"])
             if provider is not None:
                 provider_user_id = provider.id

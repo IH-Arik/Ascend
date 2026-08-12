@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
 
 from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
-from app.core.roles import ROLE_ADMIN, ROLE_PTIM, ROLE_SCS
+from app.core.roles import ADMIN_ROLES, ROLE_PTIM, ROLE_SCS
 from app.models.user import User
-from app.schemas.medical_record import RecordReviewRequest
+from app.schemas.medical_record import AccessLevelUpdateRequest, RecordReviewRequest
 from app.schemas.reconditioning import ReconditioningPlanUpdate
 from app.services.fly_away_kit_service import FlyAwayKitService
 from app.services.medical_record_service import MedicalRecordService
@@ -47,7 +47,7 @@ async def get_my_reconditioning_plan(current_user: User = Depends(get_current_us
 async def update_reconditioning_plan(
     user_id: str,
     payload: ReconditioningPlanUpdate,
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_SCS, ROLE_PTIM)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
 ) -> dict[str, Any]:
     """PT/IM, SCS, or Admin create/update an operator's reconditioning plan."""
     target_user = await User.get(user_id)
@@ -115,8 +115,19 @@ async def download_medical_record_file(
 async def review_medical_record(
     record_id: str,
     payload: RecordReviewRequest,
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_PTIM)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
 ) -> dict[str, Any]:
-    """PT/IM or Admin marks a record reviewed."""
-    data = await medical_record_service.review(current_user, record_id, payload.note)
+    """PT/IM or Admin marks a record reviewed - approved or denied."""
+    data = await medical_record_service.review(current_user, record_id, payload.note, payload.approve)
     return success_response("Record marked reviewed.", data)
+
+
+@router.patch("/uploads/{record_id}/access-level", status_code=status.HTTP_200_OK)
+async def update_record_access_level(
+    record_id: str,
+    payload: AccessLevelUpdateRequest,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+) -> dict[str, Any]:
+    """Admin narrows/sets a specific record's real approved-access role list. Audit logged."""
+    data = await medical_record_service.update_access_level(current_user, record_id, payload.approved_access_level)
+    return success_response("Access level updated successfully.", data)

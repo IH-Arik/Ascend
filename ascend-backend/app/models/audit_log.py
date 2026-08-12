@@ -21,7 +21,11 @@ class AuditLog(Document):
     """A single immutable audit event."""
 
     event_type: str
-    actor_id: PydanticObjectId
+    # Optional - a system-generated entry (e.g. the threshold-warning job,
+    # `app/core/scheduler.py`) has no real human actor. Every entry created
+    # by a real person still has a real `actor_id`; this only widens the
+    # type, it never changes existing data.
+    actor_id: PydanticObjectId | None = None
     actor_role: str
     target_entity_type: str
     target_entity_id: str

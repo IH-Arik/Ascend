@@ -2,13 +2,21 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, WebSocket, WebSocketDisconnect, status
 
 from app.api.deps import get_current_user
 from app.common.utils.responses import success_response
 from app.core.routing_levels import get_routing_levels
+from app.core.security import decode_token
+from app.models.message import Message
+from app.models.message_thread import MessageThread
 from app.models.user import User
-from app.schemas.message import ScanPreviewRequest, SendMessageRequest
+from app.schemas.message import (
+    GroupThreadCreateRequest,
+    GroupThreadSendRequest,
+    ScanPreviewRequest,
+    SendMessageRequest,
+)
 from app.services.messaging_service import MessagingService
 
 router = APIRouter()
@@ -90,3 +98,103 @@ async def get_message_trace(
     """Return the "Audit & decisions" trace panel for one message."""
     data = await messaging_service.get_message_trace(current_user, message_id)
     return success_response("Message trace loaded successfully.", data)
+
+
+@router.post("/group-threads", status_code=status.HTTP_201_CREATED)
+async def create_group_thread(
+    payload: GroupThreadCreateRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Create a real multi-participant group message thread."""
+    data = await messaging_service.create_group_thread(current_user, payload)
+    return success_response("Group thread created successfully.", data)
+
+
+@router.post("/group-threads/{thread_id}/send", status_code=status.HTTP_201_CREATED)
+async def send_group_message(
+    thread_id: str,
+    payload: GroupThreadSendRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Send a message into an existing group thread."""
+    data = await messaging_service.send_group_message(current_user, thread_id, payload.body)
+    return success_response("Message sent successfully.", data)
+
+
+@router.get("/group-threads", status_code=status.HTTP_200_OK)
+async def list_group_threads(
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return every real group thread the user is a participant in."""
+    data = await messaging_service.list_group_threads(current_user)
+    return success_response("Group threads loaded successfully.", data)
+
+
+@router.get("/group-threads/{thread_id}", status_code=status.HTTP_200_OK)
+async def get_group_thread(
+    thread_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return a full group thread with its messages."""
+    data = await messaging_service.get_group_thread(current_user, thread_id)
+    return success_response("Group thread loaded successfully.", data)
+
+
+@router.websocket("/live")
+async def messaging_live(websocket: WebSocket, token: str = "") -> None:
+    """Real-time message delivery via a MongoDB change stream (not polling).
+
+    Not DOCX-sourced - reuses the exact real pattern built for the Control
+    Plane's Audit-log "Live tail" (`app/modules/admin/routes.py`), including
+    awaiting `.watch()` before iterating it. WebSocket routes can't use the
+    normal `Depends(get_current_user)` chain, so the token is decoded
+    manually here, same as the audit-log live route.
+
+    Group-thread membership is resolved once at connect time; a thread
+    joined after the socket opens isn't picked up until the client
+    reconnects. Typing indicators are explicitly not built (ephemeral
+    UI-only concern, no real backend persistence need).
+    """
+    try:
+        payload = decode_token(token)
+        user = await User.get(payload.get("sub")) if payload.get("token_type") == "access" else None
+    except ValueError:
+        user = None
+    if user is None or not user.is_active:
+        await websocket.close(code=4403)
+        return
+
+    my_threads = await MessageThread.find({"participant_ids": user.id}).to_list()
+    my_thread_ids = {str(t.id) for t in my_threads}
+
+    await websocket.accept()
+    stream = await Message.get_motor_collection().watch([{"$match": {"operationType": "insert"}}])
+    try:
+        async for change in stream:
+            doc = change.get("fullDocument", {})
+            sender_id = str(doc.get("sender_id", ""))
+            recipient_id = str(doc["recipient_id"]) if doc.get("recipient_id") else None
+            thread_id = str(doc["thread_id"]) if doc.get("thread_id") else None
+            is_mine = (
+                sender_id == str(user.id)
+                or recipient_id == str(user.id)
+                or (thread_id is not None and thread_id in my_thread_ids)
+            )
+            if not is_mine:
+                continue
+            await websocket.send_json(
+                {
+                    "id": str(doc.get("_id")),
+                    "thread_key": doc.get("thread_key"),
+                    "thread_id": thread_id,
+                    "sender_id": sender_id,
+                    "sender_role": doc.get("sender_role"),
+                    "recipient_id": recipient_id,
+                    "body": doc.get("body"),
+                    "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
+                }
+            )
+    except WebSocketDisconnect:
+        return
+    finally:
+        await stream.close()

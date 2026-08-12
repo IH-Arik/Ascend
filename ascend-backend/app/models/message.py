@@ -24,12 +24,18 @@ def build_thread_key(user_id_a: str, user_id_b: str) -> str:
 
 
 class Message(Document):
-    """A single direct message between two users."""
+    """A single message - either a 2-party direct message (`thread_key`,
+    `recipient_id` set, `thread_id` null) or a group-thread message
+    (`thread_id` set, `recipient_id` null - a group has no single
+    recipient). `thread_key`/`recipient_id` stay required in practice for
+    1:1 sends; they're typed optional only so group messages can omit them.
+    """
 
-    thread_key: str
+    thread_key: str | None = None
+    thread_id: PydanticObjectId | None = None
     sender_id: PydanticObjectId
     sender_role: str
-    recipient_id: PydanticObjectId
+    recipient_id: PydanticObjectId | None = None
     body: str
     is_read: bool = False
     source_type: str = "user_initiated"
@@ -46,4 +52,5 @@ class Message(Document):
         indexes = [
             IndexModel([("thread_key", 1), ("created_at", 1)]),
             IndexModel([("recipient_id", 1), ("is_read", 1)]),
+            IndexModel([("thread_id", 1), ("created_at", 1)]),
         ]

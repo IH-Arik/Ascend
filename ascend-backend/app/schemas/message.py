@@ -95,3 +95,16 @@ class ScanPreviewRequest(BaseModel):
     """Preview a message body against the OPSEC content scan before sending."""
 
     body: str = Field(max_length=2000)
+
+
+class GroupThreadCreateRequest(BaseModel):
+    """Create a real multi-participant group message thread."""
+
+    participant_ids: list[str] = Field(min_length=1)
+    title: str | None = Field(default=None, max_length=120)
+
+
+class GroupThreadSendRequest(BaseModel):
+    """Send a message into an existing group thread."""
+
+    body: str = Field(min_length=1, max_length=2000)

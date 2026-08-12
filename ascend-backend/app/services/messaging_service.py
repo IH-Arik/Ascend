@@ -1,12 +1,13 @@
 """Direct messaging service (DOCX section 10, Messaging).
 
-Simplification, stated rather than hidden: the DOCX calls for role-specific
-thread visibility (a specialist should only see threads relevant to their
-role), which properly requires a provider-assignment/roster system that
-does not exist yet in this project. Until that exists, any authenticated,
-active user can message any other authenticated, active user - the client
-is expected to only surface a user's actually-assigned providers as
-recipients. Every message body is screened with the same OPSEC keyword scan
+`_can_message` is the real roster-based authorization gate, closed
+2026-08-10: allowed if either party is Admin/Superadmin (oversight always
+reachable), or a real `TeamAssignment` links them (the operator's assigned
+SCS/PT-IM, or an opted-in Nutritionist/Mental Performance/Chaplain), or both
+parties hold a real provider/admin role (peer coordination between two
+specialists/leadership). Replaces the previous placeholder ("any
+authenticated, active user can message any other") which is no longer
+accurate. Every message body is screened with the same OPSEC keyword scan
 used for notifications, per the DOCX's explicit requirement here.
 
 `get_thread` also attaches pathway context (pathway key/label/role title/
@@ -36,19 +37,32 @@ from __future__ import annotations
 
 from typing import Any
 
+from beanie import PydanticObjectId
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.notification_rules import MESSAGE_RECEIVED
 from app.core.notification_rules import scan_for_opsec_terms
+from app.core.roles import (
+    ADMIN_ROLES,
+    ROLE_CHAPLAIN,
+    ROLE_IDMT,
+    ROLE_LEADERSHIP,
+    ROLE_MENTAL_PERFORMANCE,
+    ROLE_NUTRITIONIST,
+    ROLE_PTIM,
+    ROLE_SCS,
+)
 from app.core.support_pathways import get_support_pathways
 from app.models.audit_log import AuditLog
 from app.models.message import Message, build_thread_key
+from app.models.message_thread import MessageThread
 from app.models.recommendation import Recommendation
 from app.models.team_assignment import TeamAssignment
 from app.models.user import User
 from app.schemas.message import (
     MESSAGE_ATTACHMENT_ALLOWED_EXTENSIONS,
     MESSAGE_ATTACHMENT_MAX_BYTES,
+    GroupThreadCreateRequest,
     SendMessageRequest,
 )
 from app.services.audit_log_service import AuditLogService
@@ -57,11 +71,27 @@ from app.services.notification_service import NotificationService
 
 import pathlib
 
+PROVIDER_ROLES = (
+    ROLE_SCS,
+    ROLE_PTIM,
+    ROLE_NUTRITIONIST,
+    ROLE_MENTAL_PERFORMANCE,
+    ROLE_CHAPLAIN,
+    ROLE_LEADERSHIP,
+    ROLE_IDMT,
+    *ADMIN_ROLES,
+)
+
 ROLE_SCOPE_DISPLAY = {
     "Airman": "operator",
     "SCS": "scs",
     "PT/IM": "pt/im",
+    "Nutritionist": "nutritionist",
+    "Mental Performance": "mental performance",
+    "Chaplain": "chaplain",
+    "Leadership": "leadership",
     "DWS Admin": "admin",
+    "DWS Superadmin": "superadmin",
 }
 
 
@@ -90,6 +120,11 @@ class MessagingService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot message yourself.",
+            )
+        if not await self._can_message(sender, recipient):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to message this user.",
             )
 
         related_recommendation = None
@@ -170,6 +205,23 @@ class MessagingService:
             related_entity_id=record.thread_key,
         )
         return self._serialize(record)
+
+    async def _can_message(self, sender: User, recipient: User) -> bool:
+        """Real roster-based authorization gate - see module docstring for the 3 real conditions."""
+        if sender.role in ADMIN_ROLES or recipient.role in ADMIN_ROLES:
+            return True
+        if sender.role in PROVIDER_ROLES and recipient.role in PROVIDER_ROLES:
+            return True
+        linked = await TeamAssignment.find_one(
+            {
+                "$or": [
+                    {"user_id": sender.id, "provider_user_id": recipient.id},
+                    {"user_id": recipient.id, "provider_user_id": sender.id},
+                ],
+                "status": {"$ne": "disabled"},
+            }
+        )
+        return linked is not None
 
     async def get_attachment(self, user: User, message_id: str) -> tuple[bytes, str]:
         """Return a message attachment's decrypted bytes + filename.
@@ -327,14 +379,128 @@ class MessagingService:
             "status": assignment.status if assignment is not None else None,
         }
 
+    async def create_group_thread(self, creator: User, payload: GroupThreadCreateRequest) -> dict[str, Any]:
+        """Create a real multi-participant group thread.
+
+        Every pair of participants (not just creator-to-each) must be
+        real-authorized to message each other via `_can_message` - a group
+        thread can't be used to route around the 1:1 roster gate.
+        """
+        unique_ids = {creator.id, *(PydanticObjectId(pid) for pid in payload.participant_ids)}
+        if len(unique_ids) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A group thread needs at least 2 distinct participants.",
+            )
+        participants = await User.find({"_id": {"$in": list(unique_ids)}}).to_list()
+        if len(participants) != len(unique_ids):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more participants were not found.")
+
+        for a in participants:
+            for b in participants:
+                if a.id != b.id and not await self._can_message(a, b):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"{a.full_name or a.role} is not authorized to message {b.full_name or b.role}.",
+                    )
+
+        thread = MessageThread(participant_ids=list(unique_ids), title=payload.title, created_by=creator.id)
+        await thread.insert()
+        return await self._serialize_group_thread(thread)
+
+    async def send_group_message(self, sender: User, thread_id: str, body: str) -> dict[str, Any]:
+        """Send a message into an existing group thread."""
+        thread = await MessageThread.get(thread_id)
+        if thread is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group thread not found.")
+        if sender.id not in thread.participant_ids:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this thread.")
+
+        blocked_terms = scan_for_opsec_terms(body)
+        if blocked_terms:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Message content was blocked by the OPSEC content scan.",
+                    "blocked_terms": blocked_terms,
+                },
+            )
+
+        record = Message(
+            thread_id=thread.id,
+            sender_id=sender.id,
+            sender_role=sender.role,
+            body=body.strip(),
+        )
+        await record.insert()
+
+        await self.audit_log_service.record(
+            event_type="message_sent",
+            actor_id=sender.id,
+            actor_role=sender.role,
+            target_entity_type="message",
+            target_entity_id=str(record.id),
+            summary_message=f"Message sent in group thread {thread.id}.",
+            metadata_payload={"opsec_scan": "passed", "thread_id": str(thread.id)},
+        )
+
+        for participant_id in thread.participant_ids:
+            if participant_id != sender.id:
+                await self.notification_service.notify(
+                    participant_id,
+                    family=MESSAGE_RECEIVED,
+                    title=f"New message from {sender.full_name or sender.role}",
+                    body=body.strip()[:140],
+                    related_entity_type="message_thread",
+                    related_entity_id=str(thread.id),
+                )
+        return self._serialize(record)
+
+    async def list_group_threads(self, user: User) -> dict[str, Any]:
+        """Return every real group thread the user is a participant in."""
+        threads = await MessageThread.find({"participant_ids": user.id}).to_list()
+        threads.sort(key=lambda item: item.created_at, reverse=True)
+        return {"threads": [await self._serialize_group_thread(t) for t in threads]}
+
+    async def get_group_thread(self, user: User, thread_id: str) -> dict[str, Any]:
+        """Return a full group thread with its messages, if the user is a participant."""
+        thread = await MessageThread.get(thread_id)
+        if thread is None or user.id not in thread.participant_ids:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group thread not found.")
+        messages = await Message.find(Message.thread_id == thread.id).to_list()
+        messages.sort(key=lambda item: item.created_at)
+        data = await self._serialize_group_thread(thread)
+        data["messages"] = [self._serialize(m) for m in messages]
+        return data
+
+    async def _serialize_group_thread(self, thread: MessageThread) -> dict[str, Any]:
+        """Convert a stored group thread to a transport-safe dict (without messages)."""
+        participants = await User.find({"_id": {"$in": thread.participant_ids}}).to_list()
+        by_id = {p.id: p for p in participants}
+        return {
+            "id": str(thread.id),
+            "title": thread.title,
+            "created_by": str(thread.created_by),
+            "created_at": thread.created_at.isoformat(),
+            "participants": [
+                {
+                    "id": str(pid),
+                    "name": by_id[pid].full_name if pid in by_id else None,
+                    "role": by_id[pid].role if pid in by_id else None,
+                }
+                for pid in thread.participant_ids
+            ],
+        }
+
     def _serialize(self, record: Message) -> dict[str, Any]:
-        """Convert a stored message to a transport-safe dict."""
+        """Convert a stored message to a transport-safe dict (1:1 or group)."""
         return {
             "id": str(record.id),
             "thread_key": record.thread_key,
+            "thread_id": str(record.thread_id) if record.thread_id else None,
             "sender_id": str(record.sender_id),
             "sender_role": record.sender_role,
-            "recipient_id": str(record.recipient_id),
+            "recipient_id": str(record.recipient_id) if record.recipient_id else None,
             "body": record.body,
             "is_read": record.is_read,
             "source_type": record.source_type,

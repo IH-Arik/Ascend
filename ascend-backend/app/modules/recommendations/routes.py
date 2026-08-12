@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
-from app.core.roles import ROLE_ADMIN, ROLE_PTIM, ROLE_SCS
+from app.core.roles import ADMIN_ROLES, ROLE_CHAPLAIN, ROLE_MENTAL_PERFORMANCE, ROLE_NUTRITIONIST, ROLE_PTIM, ROLE_SCS
 from app.models.user import User
 from app.schemas.recommendation import AssignActionRequest
 from app.services.recommendation_service import RecommendationService
@@ -36,11 +36,17 @@ async def get_active_recommendation(
 async def assign_action(
     user_id: str,
     payload: AssignActionRequest,
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_SCS, ROLE_PTIM)),
+    current_user: User = Depends(
+        require_roles(
+            *ADMIN_ROLES, ROLE_SCS, ROLE_PTIM, ROLE_NUTRITIONIST, ROLE_MENTAL_PERFORMANCE, ROLE_CHAPLAIN
+        )
+    ),
 ) -> dict[str, Any]:
-    """Assign a provider-authored action to a user (SCS/PT-IM/Admin only)."""
+    """Assign a provider-authored action to a user (any assigned-provider role, or Admin)."""
     target_user = await _get_target_user(user_id)
-    data = await recommendation_service.assign_action(target_user, payload, assigned_by=current_user.id)
+    data = await recommendation_service.assign_action(
+        target_user, payload, assigned_by=current_user.id, assigned_by_role=current_user.role
+    )
     return success_response("Action assigned successfully.", data)
 
 

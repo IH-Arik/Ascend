@@ -16,12 +16,13 @@ every upload/view/download/export" requirement.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.notification_rules import scan_for_opsec_terms
-from app.core.roles import ROLE_ADMIN, ROLE_PTIM
+from app.core.roles import ADMIN_ROLES, ROLE_PTIM
 from app.core.security import utc_now
 from app.core.support_pathways import get_support_pathway
 from app.models.medical_record import MedicalRecord, MedicalRecordAccessEvent
@@ -40,7 +41,12 @@ FILE_TYPE_BY_EXTENSION = {
     ".heic": "image",
 }
 
-VIEW_ALLOWED_ROLES = {ROLE_PTIM, ROLE_ADMIN}
+VIEW_ALLOWED_ROLES = {ROLE_PTIM, *ADMIN_ROLES}
+
+# Not DOCX-sourced cadence (DOCX line 147/211 names "retention status" as a
+# required field but not a specific window) - own reasonable default, same
+# pairing style as `User.access_expires_at`.
+MEDICAL_RECORD_ACCESS_EXPIRY_DAYS = 180
 
 
 class MedicalRecordService:
@@ -62,11 +68,12 @@ class MedicalRecordService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Access-reason must be at least {MIN_ACCESS_REASON_LENGTH} characters.",
             )
-        if not scan_file_stub(file.filename or ""):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This file type is not allowed.",
-            )
+        # A blocked extension no longer bare-rejects with nothing stored -
+        # it's saved as a real `"quarantined"` record instead (real, not
+        # DOCX-sourced - a Figma "Audit log" screen's quarantine claim
+        # triggered this), so there's an actual auditable record of the
+        # attempt rather than a silent 400.
+        is_quarantine_candidate = not scan_file_stub(file.filename or "")
 
         content = await file.read()
         from app.core.config import get_settings
@@ -92,8 +99,23 @@ class MedicalRecordService:
             storage_path=storage_path,
             access_reason=access_reason,
             uploaded_by=user.id,
+            status="quarantined" if is_quarantine_candidate else "pending",
+            access_expires_at=utc_now() + timedelta(days=MEDICAL_RECORD_ACCESS_EXPIRY_DAYS),
+            source="self_upload",
+            consent_status="granted",
+            approved_access_level=list(VIEW_ALLOWED_ROLES),
         )
         await record.insert()
+
+        if is_quarantine_candidate:
+            await self._log_event(
+                record.id,
+                user.id,
+                user.role,
+                "quarantine",
+                "File type failed the malware/type scan stub - quarantined, not available for review or download.",
+            )
+            return await self._serialize_detail(record)
 
         await self._log_event(record.id, user.id, user.role, "upload", access_reason)
 
@@ -132,39 +154,77 @@ class MedicalRecordService:
     async def get_file(self, user: User, record_id: str) -> tuple[bytes, str]:
         """Return decrypted file bytes + filename, logging this download."""
         record = await self._get_viewable(user, record_id)
+        if record.status == "quarantined":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This record is quarantined and is not available for download.",
+            )
         await self._log_event(record.id, user.id, user.role, "download", "Downloaded file")
         return self.storage.read_file(record.storage_path), record.file_name
 
-    async def review(self, reviewer: User, record_id: str, note: str) -> dict[str, Any]:
-        """PT/IM or Admin marks a record reviewed."""
-        if reviewer.role not in VIEW_ALLOWED_ROLES:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only PT/IM or Admin can review medical records.",
-            )
+    async def review(self, reviewer: User, record_id: str, note: str, approve: bool = True) -> dict[str, Any]:
+        """PT/IM or Admin marks a record reviewed - approved or denied."""
         record = await MedicalRecord.get(record_id)
         if record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found.")
+        allowed_roles = record.approved_access_level or list(VIEW_ALLOWED_ROLES)
+        if reviewer.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not on this record's approved access list.",
+            )
+        if record.status == "quarantined":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A quarantined record cannot be reviewed.",
+            )
 
-        record.status = "reviewed"
+        record.status = "reviewed_approved" if approve else "reviewed_denied"
         record.reviewed_by = reviewer.id
         record.reviewed_at = utc_now()
         await record.save()
 
-        await self._log_event(record.id, reviewer.id, reviewer.role, "review", note)
+        await self._log_event(
+            record.id, reviewer.id, reviewer.role, "review_approved" if approve else "review_denied", note
+        )
         return await self._serialize_detail(record)
 
     async def _get_viewable(self, user: User, record_id: str) -> MedicalRecord:
-        """Return a record if the user is its owner or an authorized reviewer."""
+        """Return a record if the user is its owner or on its real approved access list."""
         record = await MedicalRecord.get(record_id)
         if record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found.")
-        if user.id != record.user_id and user.role not in VIEW_ALLOWED_ROLES:
+        # `approved_access_level` is the real per-record source of truth
+        # (added 2026-08-10) - `VIEW_ALLOWED_ROLES` is only the default a
+        # new record starts with, not a floor every record always allows,
+        # so an admin narrowing a record's list can genuinely revoke a
+        # role's access, not just add to it.
+        allowed_roles = record.approved_access_level or list(VIEW_ALLOWED_ROLES)
+        if user.id != record.user_id and user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this record.",
             )
         return record
+
+    async def update_access_level(
+        self, admin: User, record_id: str, approved_access_level: list[str]
+    ) -> dict[str, Any]:
+        """Admin narrows/sets a specific record's real approved access list. Audit logged."""
+        record = await MedicalRecord.get(record_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found.")
+        old_access = record.approved_access_level
+        record.approved_access_level = approved_access_level
+        await record.save()
+        await self._log_event(
+            record.id,
+            admin.id,
+            admin.role,
+            "access_level_updated",
+            f"Approved access level changed from {old_access} to {approved_access_level}.",
+        )
+        return await self._serialize_detail(record)
 
     async def _notify_assigned_ptim(self, user: User, record: MedicalRecord) -> None:
         """Notify the user's assigned PT/IM that a new record is pending review."""
@@ -242,5 +302,10 @@ class MedicalRecordService:
             "uploaded_at": record.uploaded_at.isoformat(),
             "reviewed_by_name": reviewer.full_name if reviewer else None,
             "reviewed_at": record.reviewed_at.isoformat() if record.reviewed_at else None,
+            "access_expires_at": record.access_expires_at.isoformat() if record.access_expires_at else None,
+            "sensitivity_level": record.sensitivity_level,
+            "source": record.source,
+            "consent_status": record.consent_status,
+            "approved_access_level": record.approved_access_level,
             "access_log": access_log,
         }

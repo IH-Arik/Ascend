@@ -5,9 +5,29 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from beanie import PydanticObjectId
+
+from app.core.roles import ROLE_PTIM, ROLE_SCS
 from app.models.coverage_log import CoverageLog
 from app.models.user import User
 from app.schemas.coverage_log import CoverageLogCreate
+
+PRS_EVIDENCE_ROLES = (ROLE_SCS, ROLE_PTIM)
+
+
+def _as_object_id(provider_id: Any) -> PydanticObjectId:
+    """Coerce a route-supplied string id to a real `PydanticObjectId`.
+
+    Bug fix (found live-verifying Part LL, pre-existing/not introduced this
+    pass): `CoverageLog.provider_id` is stored as a real `PydanticObjectId`,
+    but `list_coverage_logs` (`app/modules/admin/routes.py`) passed the raw
+    path-param string straight through to `CoverageLog.provider_id ==
+    provider_id`. Beanie's `==` does not coerce the RHS to the field's
+    type, so MongoDB compared a string against a BSON ObjectId and silently
+    matched nothing - `GET /admin/coverage-logs/{provider_id}` always
+    returned an empty log, for every provider, since this endpoint existed.
+    """
+    return provider_id if isinstance(provider_id, PydanticObjectId) else PydanticObjectId(provider_id)
 
 
 class CoverageService:
@@ -22,6 +42,8 @@ class CoverageService:
             coverage_date=payload.coverage_date,
             is_weekend_rsd=payload.is_weekend_rsd,
             notes=payload.notes,
+            scheduled_hours=payload.scheduled_hours,
+            missed_reason=payload.missed_reason,
             logged_by=logged_by,
         )
         await record.insert()
@@ -29,7 +51,7 @@ class CoverageService:
 
     async def list_for_provider(self, provider_id: Any, year: int | None = None) -> dict[str, Any]:
         """Return a provider's coverage log, optionally filtered to one calendar year."""
-        records = await CoverageLog.find(CoverageLog.provider_id == provider_id).to_list()
+        records = await CoverageLog.find(CoverageLog.provider_id == _as_object_id(provider_id)).to_list()
         if year:
             records = [r for r in records if r.coverage_date.year == year]
         records.sort(key=lambda item: item.coverage_date, reverse=True)
@@ -37,8 +59,94 @@ class CoverageService:
 
     async def total_hours_for_provider(self, provider_id: Any, year: int) -> float:
         """Return a provider's total logged coverage hours for one calendar year."""
-        records = await CoverageLog.find(CoverageLog.provider_id == provider_id).to_list()
+        records = await CoverageLog.find(CoverageLog.provider_id == _as_object_id(provider_id)).to_list()
         return sum(r.hours for r in records if r.coverage_date.year == year)
+
+    async def total_rsd_hours_for_provider(self, provider_id: Any, year: int) -> float:
+        """Return a provider's real RSD (weekend support) hours for one calendar year.
+
+        DOCX line 239: "Track RSD weekend support coverage separately from
+        normal operating hours." `is_weekend_rsd` has been captured on
+        every `CoverageLog` entry since the model was built, but was never
+        aggregated separately until now.
+        """
+        records = await CoverageLog.find(CoverageLog.provider_id == _as_object_id(provider_id)).to_list()
+        return sum(r.hours for r in records if r.coverage_date.year == year and r.is_weekend_rsd)
+
+    async def get_rsd_summary(self, year: int) -> dict[str, Any]:
+        """Return real RSD coverage hours across every provider, for one calendar year."""
+        all_logs = await CoverageLog.find().to_list()
+        rsd_logs = [r for r in all_logs if r.coverage_date.year == year and r.is_weekend_rsd]
+        total_rsd_hours = sum(r.hours for r in rsd_logs)
+        session_count = len(rsd_logs)
+        return {
+            "year": year,
+            "total_rsd_hours": total_rsd_hours,
+            "session_count": session_count,
+        }
+
+    async def get_schedule_vs_worked_summary(self, role: str, year: int) -> dict[str, Any]:
+        """Return real scheduled-vs-worked hours for a role, for one calendar year.
+
+        Only entries that were logged with a real `scheduled_hours` value
+        contribute - entries from before this field existed (`None`) are
+        excluded rather than assumed to mean "worked == scheduled", so this
+        summary never fabricates a schedule that was never actually logged.
+        """
+        records = await CoverageLog.find(CoverageLog.role == role).to_list()
+        records = [r for r in records if r.coverage_date.year == year and r.scheduled_hours is not None]
+
+        total_scheduled_hours = sum(r.scheduled_hours for r in records if r.scheduled_hours is not None)
+        total_worked_hours = sum(r.hours for r in records)
+        missed_entries = [r for r in records if r.hours < (r.scheduled_hours or 0)]
+
+        missed_by_reason: dict[str, int] = {}
+        for record in missed_entries:
+            reason = record.missed_reason or "unspecified"
+            missed_by_reason[reason] = missed_by_reason.get(reason, 0) + 1
+
+        return {
+            "role": role,
+            "year": year,
+            "entries_with_schedule": len(records),
+            "total_scheduled_hours": total_scheduled_hours,
+            "total_worked_hours": total_worked_hours,
+            "worked_pct_of_scheduled": (
+                round(total_worked_hours / total_scheduled_hours * 100, 1) if total_scheduled_hours else None
+            ),
+            "missed_count": len(missed_entries),
+            "missed_by_reason": missed_by_reason,
+        }
+
+    async def export_prs_evidence(self, year: int) -> list[dict[str, Any]]:
+        """Return real per-entry `CoverageLog` rows for every SCS/PT-IM provider for one year.
+
+        The actual evidence artifact backing `meets_95pct_evidence` in the
+        PRS/QCP report (`ReportsService.get_prs_qcp_report`) - not a new
+        tracking system, just a flat, exportable rendering of coverage logs
+        that already exist.
+        """
+        providers = await User.find().to_list()
+        providers = [u for u in providers if u.role in PRS_EVIDENCE_ROLES]
+
+        rows: list[dict[str, Any]] = []
+        for provider in providers:
+            records = await CoverageLog.find(CoverageLog.provider_id == provider.id).to_list()
+            records = [r for r in records if r.coverage_date.year == year]
+            records.sort(key=lambda item: item.coverage_date)
+            for record in records:
+                rows.append(
+                    {
+                        "provider_id": str(provider.id),
+                        "provider_name": provider.full_name,
+                        "role": provider.role,
+                        "coverage_date": record.coverage_date.isoformat(),
+                        "hours": record.hours,
+                        "is_weekend_rsd": record.is_weekend_rsd,
+                        "notes": record.notes or "",
+                    }
+                )
+        return rows
 
     async def _serialize(self, record: CoverageLog) -> dict[str, Any]:
         """Convert a stored coverage entry to a transport-safe dict."""
@@ -52,4 +160,6 @@ class CoverageService:
             "coverage_date": record.coverage_date.isoformat(),
             "is_weekend_rsd": record.is_weekend_rsd,
             "notes": record.notes,
+            "scheduled_hours": record.scheduled_hours,
+            "missed_reason": record.missed_reason,
         }

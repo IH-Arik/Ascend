@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
-from app.core.roles import ROLE_ADMIN, ROLE_SCS
+from app.core.roles import ADMIN_ROLES, ROLE_SCS
 from app.models.user import User
 from app.schemas.assessment import AssessmentCompleteRequest, AssessmentScheduleRequest
 from app.services.assessment_service import AssessmentService
@@ -36,7 +36,7 @@ async def get_my_assessments(
 async def schedule_assessment(
     user_id: str,
     payload: AssessmentScheduleRequest,
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_SCS)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
 ) -> dict[str, Any]:
     """Schedule an assessment for a user (SCS/Admin only)."""
     target_user = await _get_target_user(user_id)
@@ -49,7 +49,7 @@ async def complete_assessment(
     user_id: str,
     assessment_type: str,
     payload: AssessmentCompleteRequest,
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_SCS)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
 ) -> dict[str, Any]:
     """Record a completed assessment result for a user (SCS/Admin only)."""
     target_user = await _get_target_user(user_id)

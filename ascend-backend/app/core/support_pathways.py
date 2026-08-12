@@ -2,13 +2,13 @@
 
 SCS and PT/IM are "locked_on" - assigned automatically, cannot be disabled
 (matches "Your SCS and PT/IM are assigned automatically" on the My Team
-screen) - and are real system roles (`app.core.roles`), so auto-assignment
-can look up an actual active provider account for them. Nutrition, Mental
-Performance, and Chaplain are opt-in per the DOCX ("authorized support
-pathways, not required contract positions") and are not yet formal system
-roles - `role` is None for them, so auto-assignment honestly finds no
-provider account rather than fabricating one; the operator toggles them
-on/off but they show "not yet assigned" until that role exists.
+screen). All 5 pathways now map to real system roles (`app.core.roles`), so
+auto-assignment can look up an actual active provider account for every
+pathway, not just the 2 locked-on ones - Nutrition/Mental Performance/
+Chaplain were `role: None` until this pass ("not yet formal system roles");
+now that they're real roles, the operator's toggle-on for an optional
+pathway can actually resolve to a real assigned provider instead of always
+showing "not yet assigned".
 
 `messaging_v1_supported` reflects the My Team screen's "Send a message ·
 v1.1" labeling on the 3 optional pathways - messaging is only wired up for
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.roles import ROLE_PTIM, ROLE_SCS
+from app.core.roles import ROLE_CHAPLAIN, ROLE_MENTAL_PERFORMANCE, ROLE_NUTRITIONIST, ROLE_PTIM, ROLE_SCS
 
 SUPPORT_PATHWAYS: list[dict[str, Any]] = [
     {
@@ -46,7 +46,7 @@ SUPPORT_PATHWAYS: list[dict[str, Any]] = [
         "role_title": "Performance Nutrition",
         "description": "Fueling strategies, hydration, and meal-planning tied to training load.",
         "always_available": False,
-        "role": None,
+        "role": ROLE_NUTRITIONIST,
         "messaging_v1_supported": False,
     },
     {
@@ -55,7 +55,7 @@ SUPPORT_PATHWAYS: list[dict[str, Any]] = [
         "role_title": "Mental Performance / Behavioral",
         "description": "Stress management, performance anxiety, and mental skills for high-tempo ops.",
         "always_available": False,
-        "role": None,
+        "role": ROLE_MENTAL_PERFORMANCE,
         "messaging_v1_supported": False,
     },
     {
@@ -64,7 +64,7 @@ SUPPORT_PATHWAYS: list[dict[str, Any]] = [
         "role_title": "Purpose / Spiritual · Chaplain",
         "description": "Confidential conversations about purpose, meaning, and values - no record retention beyond minimum required.",
         "always_available": False,
-        "role": None,
+        "role": ROLE_CHAPLAIN,
         "messaging_v1_supported": False,
     },
 ]

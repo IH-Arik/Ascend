@@ -37,7 +37,7 @@ from typing import Any
 from fastapi import HTTPException, status
 
 from app.core.notification_rules import SAFETY_BOUNDARY_PRIORITY_FLAG, scan_for_opsec_terms
-from app.core.roles import ROLE_ADMIN
+from app.core.roles import ADMIN_ROLES
 from app.core.safety_boundary import SAFETY_NOTICE, scan_for_safety_boundary_terms
 from app.core.security import utc_now
 from app.core.support_pathways import get_support_pathway, get_support_pathways
@@ -130,7 +130,7 @@ class SupportService:
 
     async def list_assigned_requests(self, user: User) -> dict[str, Any]:
         """Return support requests routed to the calling provider's role (Admin sees all)."""
-        if user.role == ROLE_ADMIN:
+        if user.role in ADMIN_ROLES:
             records = await SupportRequest.find().to_list()
         else:
             records = await SupportRequest.find(SupportRequest.pathway_key == user.role).to_list()
@@ -157,7 +157,7 @@ class SupportService:
         record = await SupportRequest.get(request_id)
         if record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found.")
-        if user.role != ROLE_ADMIN and record.pathway_key != user.role:
+        if user.role not in ADMIN_ROLES and record.pathway_key != user.role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This request is not routed to your role.",
@@ -199,7 +199,9 @@ class SupportService:
             provider = await self._find_active_provider(pathway["role"])
             if provider is not None:
                 recipients.append(provider)
-        admins = await User.find(User.role == ROLE_ADMIN).to_list()
+        admins: list[User] = []
+        for admin_role in ADMIN_ROLES:
+            admins.extend(await User.find(User.role == admin_role).to_list())
         recipients.extend(admin for admin in admins if admin.is_active)
 
         for recipient in recipients:
@@ -210,6 +212,7 @@ class SupportService:
                 body=f"A support request from {user.full_name} was flagged for immediate review.",
                 related_entity_type="support_request",
                 related_entity_id=str(record.id),
+                send_email=True,
             )
 
     async def _find_active_provider(self, role: str) -> User | None:

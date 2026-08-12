@@ -14,6 +14,8 @@ class CoverageLogCreate(BaseModel):
     coverage_date: date
     is_weekend_rsd: bool = False
     notes: str | None = Field(default=None, max_length=280)
+    scheduled_hours: float | None = Field(default=None, gt=0, le=24)
+    missed_reason: str | None = Field(default=None, max_length=120)
 
 
 class CoverageLogResponse(BaseModel):
@@ -27,3 +29,5 @@ class CoverageLogResponse(BaseModel):
     coverage_date: str
     is_weekend_rsd: bool
     notes: str | None
+    scheduled_hours: float | None
+    missed_reason: str | None

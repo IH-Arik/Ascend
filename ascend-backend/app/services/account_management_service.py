@@ -21,6 +21,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
+from app.core.roles import ADMIN_ROLES
 from app.core.security import utc_now
 from app.models.audit_log import AuditLog
 from app.models.deactivation_request import DeactivationRequest
@@ -82,7 +83,9 @@ class AccountManagementService:
             metadata_payload={"reason": payload.reason},
         )
 
-        admins = await User.find(User.role == "DWS Admin").to_list()
+        admins: list[User] = []
+        for admin_role in ADMIN_ROLES:
+            admins.extend(await User.find(User.role == admin_role).to_list())
         for admin in admins:
             if admin.is_active:
                 await self.notification_service.notify(

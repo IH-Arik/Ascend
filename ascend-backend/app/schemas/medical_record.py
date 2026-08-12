@@ -48,6 +48,13 @@ class MedicalRecordDetailResponse(BaseModel):
 
 
 class RecordReviewRequest(BaseModel):
-    """PT/IM marks an uploaded record reviewed."""
+    """PT/IM marks an uploaded record reviewed - approved or denied."""
 
     note: str = Field(min_length=1, max_length=500)
+    approve: bool = True
+
+
+class AccessLevelUpdateRequest(BaseModel):
+    """Admin narrows/sets a specific record's real approved-access role list."""
+
+    approved_access_level: list[str] = Field(min_length=1)

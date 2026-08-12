@@ -47,7 +47,11 @@ from app.schemas.wellness_report import WellnessReportResponse
 from app.services.assessment_service import AssessmentService
 from app.services.oft_service import OFTService
 from app.services.recommendation_service import RecommendationService
+from app.services.role_admin_service import RoleAdminService
 
+# Real fallback only - a role with no explicit `RoleScopeConfig` saved
+# (`app/models/role_scope_config.py`) still k-anonymity-gates at this
+# default, same value as before that config became admin-editable.
 MIN_UNIT_COHORT_SIZE = 5
 OPS_HISTORY_DAYS = 30
 WELLNESS_REPORT_WINDOW_DAYS = 30
@@ -76,6 +80,7 @@ class DashboardService:
         self.recommendation_service = RecommendationService()
         self.oft_service = OFTService()
         self.assessment_service = AssessmentService()
+        self.role_admin_service = RoleAdminService()
 
     async def get_home_dashboard(self, user: User) -> dict[str, Any]:
         """Return the aggregated Home dashboard payload."""
@@ -263,23 +268,30 @@ class DashboardService:
         return windows
 
     async def _build_public_aggregate(self, user: User) -> dict[str, Any]:
-        """Build the k-anonymity-gated unit aggregate report CTA descriptor."""
+        """Build the k-anonymity-gated unit aggregate report CTA descriptor.
+
+        `min_cohort_size` is the real, admin-configurable `cohort_k` for
+        this user's role (`RoleScopeConfig`) - falls back to
+        `MIN_UNIT_COHORT_SIZE` if no config has been explicitly saved.
+        """
+        scope_config = await self.role_admin_service.get_scope_config(user.role)
+        min_cohort_size = scope_config["cohort_k"]
         if not user.unit_id:
             return {
                 "available": False,
-                "min_cohort_size": MIN_UNIT_COHORT_SIZE,
+                "min_cohort_size": min_cohort_size,
                 "reason": "No unit is assigned to your account yet.",
             }
         cohort_size = await User.find(User.unit_id == user.unit_id).count()
-        if cohort_size < MIN_UNIT_COHORT_SIZE:
+        if cohort_size < min_cohort_size:
             return {
                 "available": False,
-                "min_cohort_size": MIN_UNIT_COHORT_SIZE,
-                "reason": f"Your unit has {cohort_size} enrolled operator(s); at least {MIN_UNIT_COHORT_SIZE} are required to protect anonymity.",
+                "min_cohort_size": min_cohort_size,
+                "reason": f"Your unit has {cohort_size} enrolled operator(s); at least {min_cohort_size} are required to protect anonymity.",
             }
         return {
             "available": True,
-            "min_cohort_size": MIN_UNIT_COHORT_SIZE,
+            "min_cohort_size": min_cohort_size,
             "reason": f"Unit-level readiness, aggregated across {cohort_size} operators.",
         }
 
@@ -364,24 +376,26 @@ class DashboardService:
         rule; the specific k>=5 threshold comes from the Trends screen's own
         "k-anonymity protected (k >= 5)" copy, not the DOCX.
         """
+        scope_config = await self.role_admin_service.get_scope_config(user.role)
+        min_cohort_size = scope_config["cohort_k"]
         if not user.unit_id:
             return {
                 "available": False,
                 "unit_id": None,
                 "cohort_size": 0,
-                "min_cohort_size": MIN_UNIT_COHORT_SIZE,
+                "min_cohort_size": min_cohort_size,
                 "reason": "No unit is assigned to your account yet.",
             }
 
         unit_users = await User.find(User.unit_id == user.unit_id).to_list()
         cohort_size = len(unit_users)
-        if cohort_size < MIN_UNIT_COHORT_SIZE:
+        if cohort_size < min_cohort_size:
             return {
                 "available": False,
                 "unit_id": user.unit_id,
                 "cohort_size": cohort_size,
-                "min_cohort_size": MIN_UNIT_COHORT_SIZE,
-                "reason": f"Your unit has {cohort_size} enrolled operator(s); at least {MIN_UNIT_COHORT_SIZE} are required to protect anonymity.",
+                "min_cohort_size": min_cohort_size,
+                "reason": f"Your unit has {cohort_size} enrolled operator(s); at least {min_cohort_size} are required to protect anonymity.",
             }
 
         ops_scores = [u.current_ops_score for u in unit_users if u.current_ops_score is not None]
@@ -405,7 +419,7 @@ class DashboardService:
             "available": True,
             "unit_id": user.unit_id,
             "cohort_size": cohort_size,
-            "min_cohort_size": MIN_UNIT_COHORT_SIZE,
+            "min_cohort_size": min_cohort_size,
             "reason": None,
             "average_ops_score": average_ops_score,
             "band_distribution": band_distribution,

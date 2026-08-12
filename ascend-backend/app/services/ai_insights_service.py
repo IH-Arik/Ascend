@@ -114,6 +114,92 @@ class AIInsightsService:
         await existing_record.save()
         return self._serialize(existing_record)
 
+    async def generate_briefing_section_narrative(self, section_key: str, section_data: dict[str, Any]) -> str:
+        """Turn one real Leadership-briefing section's structured data into real prose.
+
+        Not DOCX-sourced (a Figma Leadership "Briefings" screen). Reuses the
+        exact real pattern `_call_claude` already uses (same `AsyncAnthropic`
+        construction, same API-key presence check, same
+        `_strip_json_code_fence` fix, same try/except -> stub fallback) - a
+        new call site/prompt, not a new integration. The deterministic
+        fallback is built from the same real numbers Claude would have
+        seen, so a briefing section is never blank or fabricated-looking
+        when the AI call is unavailable or fails.
+        """
+        settings = get_settings()
+        stub = self._build_section_stub(section_key, section_data)
+        if not settings.ai_provider_api_key:
+            return stub
+
+        client = AsyncAnthropic(api_key=settings.ai_provider_api_key)
+        try:
+            response = await client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=300,
+                temperature=0,
+                system=(
+                    "You are an Ascend Leadership briefing writer. Given real "
+                    "aggregate readiness data as JSON, write one short, factual, "
+                    "provider-safe paragraph (2-4 sentences) summarizing it for a "
+                    "commander. Return only valid JSON with exactly one key: "
+                    "narrative. Never invent a number not present in the input."
+                ),
+                messages=[
+                    {"role": "user", "content": json.dumps({"section": section_key, "data": section_data}, ensure_ascii=True)}
+                ],
+            )
+            text = "".join(
+                block.text for block in response.content if getattr(block, "type", "") == "text"
+            ).strip()
+            parsed = json.loads(self._strip_json_code_fence(text))
+            narrative = parsed.get("narrative") if isinstance(parsed, dict) else None
+            return narrative or stub
+        except Exception:
+            logger.warning("Claude briefing-narrative call failed; falling back to stub.", exc_info=True)
+            return stub
+
+    def _build_section_stub(self, section_key: str, data: dict[str, Any]) -> str:
+        """Real deterministic fallback sentence for one briefing section, built from real numbers."""
+        if section_key == "mission_context":
+            return (
+                f"Cohort of {data.get('cohort_size', 0)} over the {data.get('period', 'selected')} "
+                f"window, {data.get('confidence', 'unknown')} confidence."
+            )
+        if section_key == "composite_trend":
+            score = data.get("average_ops_score")
+            band = data.get("score_band")
+            mom = data.get("mom_delta")
+            score_text = "unavailable" if score is None else f"{score}"
+            mom_text = "" if mom is None else f", {mom:+.1f} vs prior period"
+            return f"Composite OPS at {score_text} ({band}){mom_text}."
+        if section_key == "driver_snapshot":
+            parts = [
+                f"{d['component'].replace(' Readiness', '')} {d['average_score']} ({d['score_band']})"
+                for d in data.get("drivers", [])
+                if d.get("average_score") is not None
+            ]
+            return f"Drivers - {', '.join(parts)}." if parts else "Driver data unavailable this period."
+        if section_key == "by_flight":
+            flights = data.get("flights", [])
+            return (
+                f"{len(flights)} flights reporting at k>={data.get('min_cohort_size', 5)}."
+                if flights
+                else "No flights currently meet the cohort minimum."
+            )
+        if section_key == "oft_snapshot":
+            rate = data.get("pass_rate_pct")
+            return f"OFT pass rate {rate}% cohort-wide." if rate is not None else "OFT pass rate unavailable this period."
+        if section_key == "band_distribution":
+            parts = [f"{b['band']} {b['count']}" for b in data.get("current_distribution", [])]
+            return f"Band distribution - {', '.join(parts)}." if parts else "Band distribution unavailable this period."
+        if section_key == "risk_recommendations":
+            max_sev = data.get("max_severity")
+            annotations = data.get("annotation_titles", [])
+            sev_text = f"Highest open advisory: {max_sev}." if max_sev else "No open threshold advisories this period."
+            ann_text = f" Notable: {', '.join(annotations)}." if annotations else ""
+            return sev_text + ann_text
+        return "No data available for this section."
+
     async def get_latest_for_user(
         self,
         user: User,

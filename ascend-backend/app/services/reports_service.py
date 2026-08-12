@@ -72,8 +72,9 @@ class ReportsService:
         """Assessment Completion Report: real initial-assessment completion rates.
 
         Cohorts by time since account creation (<=6 months, <=12 months),
-        against the DOCX's 50%-by-6-months / 90%-by-12-months targets. Does
-        not include "feedback sessions" - not tracked in this backend.
+        against the DOCX's 50%-by-6-months / 90%-by-12-months targets.
+        Feedback-session completion is a separate real aggregate -
+        `get_feedback_session_summary` - not merged into this report.
         """
         operators = await User.find(User.role == "Airman").to_list()
         assessments = await Assessment.find(Assessment.assessment_type == "initial").to_list()
@@ -102,6 +103,32 @@ class ReportsService:
             "eligible_12_month_cohort_size": len(cohort_12mo),
             "eligible_12_month_completion_pct": completion_rate(cohort_12mo),
             "eligible_12_month_target_pct": 90.0,
+        }
+
+    async def get_feedback_session_summary(self, period_start: date, period_end: date) -> dict[str, Any]:
+        """Real feedback-session completion aggregate for a real date period.
+
+        Not DOCX-sourced (a Figma Leadership "Aggregate readiness" screen
+        triggered this). Scoped to `Assessment.completed_date` within the
+        period - a feedback session is a follow-up to a completed
+        assessment, so an assessment that never completed can't have one.
+        `feedback_session_status` is a real per-record field
+        (`app/schemas/assessment.py`: offered/completed/declined/pending)
+        that already existed but was never aggregated across users before.
+        """
+        assessments = await Assessment.find().to_list()
+        in_period = [
+            a for a in assessments if a.completed_date is not None and period_start <= a.completed_date <= period_end
+        ]
+        completed_count = sum(1 for a in in_period if a.feedback_session_status == "completed")
+        total = len(in_period)
+
+        return {
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+            "total_assessments_in_period": total,
+            "feedback_sessions_completed": completed_count,
+            "completion_pct": round(completed_count / total * 100, 1) if total else None,
         }
 
     async def get_utilization_report(self, days: int = 90) -> dict[str, Any]:
@@ -133,7 +160,10 @@ class ReportsService:
         against a 95% coverage-evidence threshold. Also includes the
         assessment-completion rate from `get_assessment_completion_report`.
         Does not include "corrective actions" or "issue categories" - not
-        tracked anywhere in this backend.
+        tracked anywhere in this backend. `rsd_coverage` is real (DOCX line
+        239: "Track RSD weekend support coverage separately from normal
+        operating hours") - `CoverageLog.is_weekend_rsd` has always
+        captured this, it just wasn't surfaced separately until now.
         """
         year = year or date.today().year
         providers = await User.find().to_list()
@@ -142,6 +172,7 @@ class ReportsService:
         provider_rows = []
         for provider in providers:
             hours = await self.coverage_service.total_hours_for_provider(provider.id, year)
+            rsd_hours = await self.coverage_service.total_rsd_hours_for_provider(provider.id, year)
             target = PRS_TARGET_HOURS[provider.role]
             coverage_pct = round(hours / target * 100, 1) if target else 0.0
             provider_rows.append(
@@ -150,6 +181,7 @@ class ReportsService:
                     "provider_name": provider.full_name,
                     "role": provider.role,
                     "logged_hours": hours,
+                    "rsd_hours": rsd_hours,
                     "target_hours": target,
                     "coverage_pct": coverage_pct,
                     "meets_95pct_evidence": coverage_pct >= PRS_COVERAGE_EVIDENCE_THRESHOLD * 100,
@@ -157,8 +189,10 @@ class ReportsService:
             )
 
         assessment_compliance = await self.get_assessment_completion_report()
+        rsd_coverage = await self.coverage_service.get_rsd_summary(year)
         return {
             "year": year,
             "providers": provider_rows,
             "assessment_compliance": assessment_compliance,
+            "rsd_coverage": rsd_coverage,
         }

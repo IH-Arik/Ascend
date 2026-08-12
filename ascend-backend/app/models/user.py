@@ -54,6 +54,14 @@ class User(Document):
     password_reset_code: str | None = None
     password_reset_expires_at: datetime | None = None
     last_login_at: datetime | None = None
+    # Not DOCX-sourced - a Figma "Roles & RBAC" screen showed an access-
+    # expiration/annual-renewal concept with no prior backend equivalent.
+    # Real tracking (set at registration, extendable via
+    # `POST /admin/users/{id}/renew-access`), but not enforced at
+    # login/access-check and not auto-renewed by any background process -
+    # a date that silently re-extends itself before anyone reaches it would
+    # make the concept meaningless. Documented scope decision, not a gap.
+    access_expires_at: datetime | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

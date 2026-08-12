@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 
 from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
-from app.core.roles import ROLE_ADMIN, ROLE_PTIM, ROLE_SCS
+from app.core.roles import ADMIN_ROLES, ROLE_PTIM, ROLE_SCS
 from app.models.user import User
 from app.schemas.support import SupportRequestCreate
 from app.schemas.support import TogglePathwayRequest
@@ -49,7 +49,7 @@ async def list_support_requests(
 
 @router.get("/requests/assigned", status_code=status.HTTP_200_OK)
 async def get_assigned_support_requests(
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_SCS, ROLE_PTIM)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
 ) -> dict[str, Any]:
     """Return support requests routed to the calling provider's role (Admin sees all)."""
     data = await support_service.list_assigned_requests(current_user)
@@ -60,7 +60,7 @@ async def get_assigned_support_requests(
 async def update_support_request_status(
     request_id: str,
     payload: UpdateRequestStatusRequest,
-    current_user: User = Depends(require_roles(ROLE_ADMIN, ROLE_SCS, ROLE_PTIM)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
 ) -> dict[str, Any]:
     """Update a support request's status (provider or Admin only)."""
     data = await support_service.update_request_status(current_user, request_id, payload.status)
