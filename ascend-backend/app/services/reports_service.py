@@ -36,9 +36,10 @@ class ReportsService:
         """Injury/Recovery Report: real reconditioning plans + limitation-flagged workouts.
 
         Sourced from `ReconditioningPlan` (injury flags, PT/IM clearance,
-        phase) and `WorkoutLog.reported_limitation` in the window. Does not
-        include free-text "rehab strategy summaries" - that content lives in
-        provider notes/messaging, which this report does not aggregate.
+        phase, plus the real DOCX Section 8.4 fields added 2026-08-13:
+        limitation_flag/rehab_strategy_summary/scs_coordination_status, and
+        the net-new severity_level/days_out) and
+        `WorkoutLog.reported_limitation` in the window.
         """
         cutoff = date.today() - timedelta(days=days)
         plans = await ReconditioningPlan.find().to_list()
@@ -53,9 +54,17 @@ class ReportsService:
 
         relevant_user_ids = {p.user_id for p in plans} | set(workouts_by_user.keys())
         rows = []
+        severity_breakdown: dict[str, int] = {}
         for user_id in relevant_user_ids:
             user = await User.get(user_id)
             plan = next((p for p in plans if p.user_id == user_id), None)
+            days_out = (
+                (date.today() - plan.injury_reported_on).days
+                if plan and plan.injury_reported_on and plan.phase != "completed"
+                else None
+            )
+            if plan and plan.severity_level:
+                severity_breakdown[plan.severity_level] = severity_breakdown.get(plan.severity_level, 0) + 1
             rows.append(
                 {
                     "user_id": str(user_id),
@@ -63,10 +72,24 @@ class ReportsService:
                     "reconditioning_phase": plan.phase if plan else None,
                     "ptim_clearance_status": plan.ptim_clearance_status if plan else None,
                     "injury_flags": plan.injury_flags if plan else [],
+                    "limitation_flag": plan.limitation_flag if plan else False,
+                    "rehab_strategy_summary": plan.rehab_strategy_summary if plan else None,
+                    "scs_coordination_status": plan.scs_coordination_status if plan else None,
+                    "severity_level": plan.severity_level if plan else None,
+                    "days_out": days_out,
                     "limitation_flagged_workouts_in_window": workouts_by_user.get(user_id, 0),
                 }
             )
-        return {"window_days": days, "operator_count": len(rows), "operators": rows}
+        return {
+            "window_days": days,
+            "operator_count": len(rows),
+            # Real per-severity counts of what's actually in the window - not
+            # a fabricated per-100-airmen rate (no DOCX or real cohort-size
+            # basis exists for that), matching the DOCX's own "unresolved
+            # issues" framing for this report.
+            "severity_breakdown": severity_breakdown,
+            "operators": rows,
+        }
 
     async def get_assessment_completion_report(self) -> dict[str, Any]:
         """Assessment Completion Report: real initial-assessment completion rates.

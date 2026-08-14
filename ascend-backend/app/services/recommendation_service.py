@@ -18,6 +18,7 @@ from app.core.recommendation_rules import COMPONENT_PRIORITY_ORDER
 from app.core.recommendation_rules import HIGH_THRESHOLD
 from app.core.recommendation_rules import MODERATE_THRESHOLD
 from app.core.recommendation_rules import get_recommendation_rule
+from app.core.roles import ROLE_PTIM, ROLE_SCS, SPECIALIST_ROLES
 from app.core.security import utc_now
 
 # Approximate mapping onto the DOCX's L0-L5 routing taxonomy
@@ -69,10 +70,10 @@ class RecommendationService:
                 and existing_active.severity == severity
             )
             if same_trigger:
-                return self._serialize(existing_active)
+                return await self._serialize(existing_active)
             if SEVERITY_RANK[severity] <= SEVERITY_RANK[existing_active.severity]:
                 # Keep showing the current (equal-or-worse) recommendation; one at a time.
-                return self._serialize(existing_active)
+                return await self._serialize(existing_active)
             existing_active.status = "superseded"
             existing_active.updated_at = utc_now()
             await existing_active.save()
@@ -101,6 +102,13 @@ class RecommendationService:
             provider_action_type=rule["provider_action_type"],
             specialist_route=rule.get("specialist_route"),
             route_level=SEVERITY_TO_ROUTE_LEVEL.get(severity),
+            plan_link_category=(
+                "user_only_recommendation"
+                if not rule.get("specialist_route")
+                else "scs_recommendation"
+                if rule["provider_action_type"] == "scs_recommendation"
+                else "specialist_routing_item"
+            ),
             follow_up_timeline=rule["follow_up_timeline"],
         )
         await record.insert()
@@ -112,7 +120,7 @@ class RecommendationService:
             related_entity_type="recommendation",
             related_entity_id=str(record.id),
         )
-        return self._serialize(record)
+        return await self._serialize(record)
 
     async def assign_action(
         self,
@@ -136,6 +144,17 @@ class RecommendationService:
             existing_active.updated_at = utc_now()
             await existing_active.save()
 
+        if payload.is_joint_coordination:
+            plan_link_category = "joint_coordination_item"
+        elif payload.assigned_provider_role == ROLE_SCS:
+            plan_link_category = "scs_recommendation"
+        elif payload.assigned_provider_role == ROLE_PTIM:
+            plan_link_category = "ptim_review_item"
+        elif payload.assigned_provider_role in SPECIALIST_ROLES:
+            plan_link_category = "specialist_routing_item"
+        else:
+            plan_link_category = "user_only_recommendation"
+
         record = Recommendation(
             user_id=user.id,
             readiness_component=payload.readiness_component,
@@ -149,6 +168,7 @@ class RecommendationService:
             provider_action_type="provider_assigned_plan_link",
             specialist_route=payload.assigned_provider_role,
             route_level=None,  # a human provider decided directly - not an automatic L-level
+            plan_link_category=plan_link_category,
             follow_up_timeline=payload.follow_up_timeline,
             assigned_provider_name=payload.assigned_provider_name,
             assigned_provider_role=payload.assigned_provider_role,
@@ -177,12 +197,12 @@ class RecommendationService:
             summary_message=f"Assigned action '{record.title}' to {user.email}.",
             metadata_payload={"readiness_component": payload.readiness_component},
         )
-        return self._serialize(record)
+        return await self._serialize(record)
 
     async def get_by_id(self, user: User, recommendation_id: str) -> dict[str, Any]:
         """Return a single recommendation/assigned action by id (Assigned Action screen)."""
         record = await self._get_owned(user, recommendation_id)
-        return self._serialize(record)
+        return await self._serialize(record)
 
     async def complete_step(
         self, user: User, recommendation_id: str, step_index: int
@@ -197,14 +217,14 @@ class RecommendationService:
         record.steps[step_index]["completed"] = True
         record.updated_at = utc_now()
         await record.save()
-        return self._serialize(record)
+        return await self._serialize(record)
 
     async def get_active_for_user(self, user: User) -> dict[str, Any] | None:
         """Return the current active recommendation for a user, if any."""
         record = await self._get_active(user)
         if record is None:
             return None
-        return self._serialize(record)
+        return await self._serialize(record)
 
     async def dismiss(self, user: User, recommendation_id: str) -> dict[str, Any]:
         """Dismiss an active recommendation."""
@@ -220,7 +240,7 @@ class RecommendationService:
             target_entity_id=str(record.id),
             summary_message=f"Dismissed recommendation '{record.title}'.",
         )
-        return self._serialize(record)
+        return await self._serialize(record)
 
     async def complete(self, user: User, recommendation_id: str) -> dict[str, Any]:
         """Mark a recommendation's action as completed."""
@@ -236,7 +256,7 @@ class RecommendationService:
             target_entity_id=str(record.id),
             summary_message=f"Completed recommendation '{record.title}'.",
         )
-        return self._serialize(record)
+        return await self._serialize(record)
 
     async def _get_owned(self, user: User, recommendation_id: str) -> Recommendation:
         """Return a recommendation owned by the user, or raise 404."""
@@ -288,8 +308,53 @@ class RecommendationService:
         )
         return triggered[0]
 
-    def _serialize(self, record: Recommendation) -> dict[str, Any]:
+    async def send_for_signoff(self, user: User, recommendation_id: str, actor: Any, actor_role: str) -> dict[str, Any]:
+        """SCS, PT/IM, or Admin sends a joint-coordination recommendation for PT/IM signoff."""
+        record = await self._get_owned(user, recommendation_id)
+        if record.plan_link_category != "joint_coordination_item":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only a joint coordination item can be sent for signoff.",
+            )
+        record.coordination_signoff_status = "pending_signoff"
+        record.updated_at = utc_now()
+        await record.save()
+        await self.audit_log_service.record(
+            event_type="coordination_sent_for_signoff",
+            actor_id=actor,
+            actor_role=actor_role,
+            target_entity_type="recommendation",
+            target_entity_id=str(record.id),
+            summary_message=f"Sent '{record.title}' for PT/IM signoff.",
+        )
+        return await self._serialize(record)
+
+    async def sign_off(self, user: User, recommendation_id: str, actor: Any, actor_role: str) -> dict[str, Any]:
+        """PT/IM (or Admin) signs off a coordination item previously sent for signoff."""
+        record = await self._get_owned(user, recommendation_id)
+        if record.coordination_signoff_status != "pending_signoff":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This item has not been sent for signoff.",
+            )
+        record.coordination_signoff_status = "signed_off"
+        record.signed_off_by = actor
+        record.signed_off_at = utc_now()
+        record.updated_at = utc_now()
+        await record.save()
+        await self.audit_log_service.record(
+            event_type="coordination_signed_off",
+            actor_id=actor,
+            actor_role=actor_role,
+            target_entity_type="recommendation",
+            target_entity_id=str(record.id),
+            summary_message=f"Signed off '{record.title}'.",
+        )
+        return await self._serialize(record)
+
+    async def _serialize(self, record: Recommendation) -> dict[str, Any]:
         """Convert a stored recommendation to a transport-safe dict."""
+        signed_off_by_user = await User.get(record.signed_off_by) if record.signed_off_by else None
         return {
             "id": str(record.id),
             "readiness_component": record.readiness_component,
@@ -300,6 +365,10 @@ class RecommendationService:
             "provider_action_type": record.provider_action_type,
             "specialist_route": record.specialist_route,
             "route_level": record.route_level,
+            "plan_link_category": record.plan_link_category,
+            "coordination_signoff_status": record.coordination_signoff_status,
+            "signed_off_by_name": signed_off_by_user.full_name if signed_off_by_user else None,
+            "signed_off_at": record.signed_off_at.isoformat() if record.signed_off_at else None,
             "follow_up_timeline": record.follow_up_timeline,
             "trigger_reason": record.trigger_reason,
             "status": record.status,

@@ -13,7 +13,7 @@ from app.common.utils.responses import success_response
 from app.core import database as database_module
 from app.core.config import get_settings
 from app.core.question_registry import build_question_registry
-from app.core.roles import ADMIN_ROLES, ROLE_LEADERSHIP, ROLE_PTIM, ROLE_SCS
+from app.core.roles import ADMIN_ROLES, ROLE_IDMT, ROLE_LEADERSHIP, ROLE_PTIM, ROLE_SCS
 from app.core.scheduler import (
     DAILY_REMINDERS_JOB,
     EXPIRE_STALE_CONFIRMATIONS_JOB,
@@ -38,6 +38,7 @@ from app.schemas.admin_user import (
 from app.schemas.coverage_log import CoverageLogCreate
 from app.schemas.emergency_contact import EmergencyContactUpdate
 from app.schemas.equipment_gap import EquipmentGapCreate, EquipmentGapUpdate
+from app.schemas.idmt_handoff import IdmtHandoffCreateRequest
 from app.schemas.org_unit import OrgUnitCreate
 from app.schemas.provider_credential import CredentialCreate
 from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportStatusUpdate
@@ -53,6 +54,7 @@ from app.services.coverage_service import CoverageService
 from app.services.credential_service import CredentialService
 from app.services.equipment_gap_service import EquipmentGapService
 from app.services.fly_away_kit_service import FlyAwayKitService
+from app.services.idmt_handoff_service import IdmtHandoffService
 from app.services.leadership_aggregate_service import LeadershipAggregateService
 from app.services.oft_service import OFTService
 from app.services.org_unit_service import OrgUnitService
@@ -92,6 +94,7 @@ reports_service = ReportsService()
 report_export_service = ReportExportService()
 oft_service = OFTService()
 leadership_aggregate_service = LeadershipAggregateService()
+idmt_handoff_service = IdmtHandoffService()
 
 PROVIDER_ROLES = (*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)
 
@@ -492,6 +495,72 @@ async def revert_confirmation(
     return success_response("Confirmation reverted.", data)
 
 
+# --- IDMT documentation handoff (DOCX Section 8.5) ---
+
+
+@router.post("/idmt-handoffs", summary="Prepare a real IDMT documentation handoff (pending second-reviewer approval)")
+async def prepare_idmt_handoff(
+    payload: IdmtHandoffCreateRequest,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+):
+    """PT/IM or Admin prepares a documentation handoff for IDMT. Never applied immediately."""
+    data = await idmt_handoff_service.prepare(
+        current_user, payload.user_id, payload.export_type, payload.export_format
+    )
+    return JSONResponse(
+        status_code=202,
+        content=success_response("Handoff pending second-reviewer approval.", data),
+    )
+
+
+@router.get("/idmt-handoffs", summary="List IDMT documentation handoffs")
+async def list_idmt_handoffs(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_IDMT)),
+):
+    """IDMT sees only transmitted/acknowledged handoffs; Admin sees every status."""
+    data = (
+        await idmt_handoff_service.list_for_idmt()
+        if current_user.role == ROLE_IDMT
+        else await idmt_handoff_service.list_all()
+    )
+    return success_response("IDMT handoffs loaded successfully.", data)
+
+
+@router.post("/idmt-handoffs/{handoff_id}/transmit", summary="Mark an approved handoff transmitted")
+async def transmit_idmt_handoff(
+    handoff_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+):
+    """A real, distinct state from 'approved' - DOCX tracks prepared/transmitted/acknowledged separately."""
+    data = await idmt_handoff_service.transmit(current_user, handoff_id)
+    return success_response("Handoff marked transmitted.", data)
+
+
+@router.post("/idmt-handoffs/{handoff_id}/acknowledge", summary="IDMT acknowledges receipt of a handoff")
+async def acknowledge_idmt_handoff(
+    handoff_id: str,
+    current_user: User = Depends(require_roles(ROLE_IDMT, *ADMIN_ROLES)),
+):
+    """Real, DOCX-sourced `acknowledgement_status` field - not a fabricated read-receipt object."""
+    data = await idmt_handoff_service.acknowledge(current_user, handoff_id)
+    return success_response("Handoff acknowledged.", data)
+
+
+@router.get("/idmt-handoffs/{handoff_id}/download", summary="Download a transmitted handoff's real summary content")
+async def download_idmt_handoff(
+    handoff_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_IDMT)),
+):
+    """Real structured summary (reconditioning/medical-record-category counts/OFT status) - never raw file bytes."""
+    content, filename = await idmt_handoff_service.download(current_user, handoff_id)
+    media_type = "application/pdf" if filename.endswith(".pdf") else "text/csv"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.put("/emergency-contacts/{unit_id}", summary="Set a unit's Fly Away Kit emergency contacts")
 async def update_emergency_contacts(
     unit_id: str,
@@ -570,6 +639,16 @@ async def renew_user_access(
     """Admin extends `access_expires_at` by another `ACCESS_EXPIRY_DAYS`. Audit logged."""
     data = await admin_user_service.renew_access(current_user, user_id)
     return success_response("Access renewed successfully.", data)
+
+
+@router.post("/users/{user_id}/reset-password", summary="Admin generates and emails a real temp password")
+async def reset_user_password(
+    user_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    """Admin resets a user's password. The temp password is emailed only - never returned here."""
+    data = await admin_user_service.reset_password(current_user, user_id)
+    return success_response("Password reset successfully.", data)
 
 
 @router.post("/users/{user_id}/assign-provider", summary="Manually assign a My Support Team provider")
@@ -684,6 +763,15 @@ async def list_coverage_logs(
     """Return a provider's coverage-hours log, optionally filtered to one year."""
     data = await coverage_service.list_for_provider(provider_id, year)
     return success_response("Coverage log loaded successfully.", data)
+
+
+@router.get("/coverage/reconditioning-load-by-flight", summary="Real per-flight reconditioning/rehab caseload, k-gated")
+async def get_reconditioning_load_by_flight(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
+):
+    """SCS or Admin views real reconditioning/rehab caseload by flight."""
+    data = await coverage_service.get_reconditioning_load_by_flight()
+    return success_response("Reconditioning load by flight loaded successfully.", data)
 
 
 # --- Admin-configurable OPS scoring weights/thresholds ---

@@ -19,6 +19,7 @@ from app.models import CoverageLog
 from app.models import DeactivationRequest
 from app.models import EmergencyContactConfig
 from app.models import EquipmentGap
+from app.models import IdmtHandoff
 from app.models import LeadershipAnnotation
 from app.models import MedicalRecord
 from app.models import MedicalRecordAccessEvent
@@ -31,14 +32,18 @@ from app.models import OpsSnapshot
 from app.models import OrgUnit
 from app.models import PendingConfirmation
 from app.models import ProviderCredential
+from app.models import ReconditioningEvent
 from app.models import ReconditioningPlan
 from app.models import Recommendation
+from app.models import Restriction
+from app.models import RomMeasurement
 from app.models import RecommendationThresholdConfig
 from app.models import ReportExport
 from app.models import RoleScopeConfig
 from app.models import ScheduledExport
 from app.models import SchedulerJobRun
 from app.models import ScoringConfig
+from app.models import SpecialistNote
 from app.models import SupportRequest
 from app.models import TeamAssignment
 from app.models import User
@@ -112,6 +117,11 @@ async def init_db() -> None:
                 MessageThread,
                 LeadershipAnnotation,
                 Briefing,
+                IdmtHandoff,
+                RomMeasurement,
+                ReconditioningEvent,
+                Restriction,
+                SpecialistNote,
             ],
         )
     except PyMongoError:

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
 from app.core.roles import ADMIN_ROLES, ROLE_CHAPLAIN, ROLE_MENTAL_PERFORMANCE, ROLE_NUTRITIONIST, ROLE_PTIM, ROLE_SCS
+from app.models.recommendation import Recommendation
 from app.models.user import User
 from app.schemas.recommendation import AssignActionRequest
 from app.services.recommendation_service import RecommendationService
@@ -48,6 +49,34 @@ async def assign_action(
         target_user, payload, assigned_by=current_user.id, assigned_by_role=current_user.role
     )
     return success_response("Action assigned successfully.", data)
+
+
+@router.post("/{recommendation_id}/send-for-signoff", status_code=status.HTTP_200_OK)
+async def send_recommendation_for_signoff(
+    recommendation_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """SCS, PT/IM, or Admin sends a joint-coordination item for PT/IM signoff."""
+    record = await Recommendation.get(recommendation_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found.")
+    owner = await _get_target_user(str(record.user_id))
+    data = await recommendation_service.send_for_signoff(owner, recommendation_id, current_user.id, current_user.role)
+    return success_response("Sent for signoff successfully.", data)
+
+
+@router.post("/{recommendation_id}/sign-off", status_code=status.HTTP_200_OK)
+async def sign_off_recommendation(
+    recommendation_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """PT/IM (or Admin) signs off a coordination item previously sent for signoff."""
+    record = await Recommendation.get(recommendation_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found.")
+    owner = await _get_target_user(str(record.user_id))
+    data = await recommendation_service.sign_off(owner, recommendation_id, current_user.id, current_user.role)
+    return success_response("Signed off successfully.", data)
 
 
 @router.get("/{recommendation_id}", status_code=status.HTTP_200_OK)

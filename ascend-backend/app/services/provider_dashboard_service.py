@@ -63,6 +63,17 @@ SPECIALIST_COMPONENT_BY_ROLE = {
     ROLE_CHAPLAIN: "Spiritual Readiness",
 }
 
+# DOCX Nutritionist role-scope text: "review meal consistency, skipped
+# meals, hydration, quick/processed meal patterns, and related energy/
+# recovery summaries." All 5 real question codes below are tagged
+# `readiness_component: "Nutritional Readiness"` in the daily/weekly/
+# monthly question banks. No question anywhere covers "quick/processed
+# meal patterns" specifically (checked, zero matches across the question
+# banks) - that DOCX phrase has no scored data behind it and is
+# deliberately not approximated with a fabricated field.
+NUTRITION_SIGNAL_QUESTION_CODES = ("d0_04", "w_03", "w_04", "m_03", "m_04")
+NUTRITION_SIGNAL_WINDOW_DAYS = 60
+
 
 class ProviderDashboardService:
     """Build the 5 provider-facing dashboards from real tracked data."""
@@ -144,6 +155,11 @@ class ProviderDashboardService:
                     "oft_status": oft_status["current_status"],
                     "reconditioning_active": reconditioning["available"],
                     "active_risk_flag": active_recommendation.title if active_recommendation else None,
+                    # Real L0-L5 escalation level (DOCX Table 20,
+                    # `app/core/routing_levels.py`) already computed on the
+                    # active recommendation - `None` (L0/no flag) when there
+                    # isn't one. Not a fabricated per-component chip.
+                    "driver_flag": active_recommendation.route_level if active_recommendation else None,
                     "ptim_referral_status": ptim_referral,
                 }
             )
@@ -218,6 +234,7 @@ class ProviderDashboardService:
         requests = await SupportRequest.find(SupportRequest.pathway_key == pathway_key).to_list()
         requests.sort(key=lambda r: r.created_at, reverse=True)
 
+        today = date.today()
         rows = []
         for user_id in user_ids:
             user = await User.get(user_id)
@@ -225,23 +242,37 @@ class ProviderDashboardService:
                 continue
             active_recommendation = await self._active_recommendation(user_id, specialist_route=pathway_key)
             user_requests = [r for r in requests if r.user_id == user_id]
-            rows.append(
-                {
-                    "user_id": str(user_id),
-                    "user_name": user.full_name,
-                    "relevant_component_score": (
-                        (user.current_component_scores or {}).get(component) if component else None
-                    ),
-                    "assigned_action_title": active_recommendation.title if active_recommendation else None,
-                    "latest_request_status": user_requests[0].status if user_requests else None,
-                }
-            )
+            row = {
+                "user_id": str(user_id),
+                "user_name": user.full_name,
+                "relevant_component_score": (
+                    (user.current_component_scores or {}).get(component) if component else None
+                ),
+                "assigned_action_title": active_recommendation.title if active_recommendation else None,
+                "latest_request_status": user_requests[0].status if user_requests else None,
+            }
+            if pathway_key == ROLE_NUTRITIONIST:
+                row["nutrition_signals"] = await self._build_nutrition_signals(user_id, today)
+            rows.append(row)
 
         return {
             "pathway_key": pathway_key,
             "relevant_readiness_component": component,
             "assigned_count": len(rows),
             "open_request_count": sum(1 for r in requests if r.status == "open"),
+            # Real count over the provider's own already-visible caseload -
+            # no k-anonymity concern (same access level they already have to
+            # each individual's score). `None` for non-Nutrition pathways,
+            # not fabricated for MP/Chaplain.
+            "low_consistency_operator_count": (
+                sum(
+                    1
+                    for r in rows
+                    if r.get("nutrition_signals", {}).get("skipped_meals_or_low_hydration_flags_60d", 0) > 0
+                )
+                if pathway_key == ROLE_NUTRITIONIST
+                else None
+            ),
             "operators": rows,
             "recent_requests": [
                 {
@@ -253,6 +284,40 @@ class ProviderDashboardService:
                 }
                 for r in requests[:10]
             ],
+        }
+
+    async def _build_nutrition_signals(self, user_id: Any, today: date) -> dict[str, Any]:
+        """Real meal-consistency/hydration signals from `CheckinAnswer` (Nutritionist-only).
+
+        Reuses the same real query-then-first-vs-last-delta pattern as
+        `DashboardService._build_influences` (`d0_03` recovery trend),
+        applied to `NUTRITION_SIGNAL_QUESTION_CODES` instead. No "quick/
+        processed meal patterns" field - see the module-level constant's
+        docstring for why.
+        """
+        cutoff = today - timedelta(days=NUTRITION_SIGNAL_WINDOW_DAYS)
+        # Filtered in Python, not via a multi-value Mongo query - same
+        # documented preference elsewhere in this codebase for keeping
+        # Beanie query construction simple and predictable.
+        all_answers = await CheckinAnswer.find(
+            CheckinAnswer.user_id == user_id, CheckinAnswer.checkin_date >= cutoff
+        ).to_list()
+        answers = [a for a in all_answers if a.question_code in NUTRITION_SIGNAL_QUESTION_CODES]
+
+        def trend_for(code: str) -> str | None:
+            series = sorted((a for a in answers if a.question_code == code), key=lambda a: a.checkin_date)
+            if len(series) < 2:
+                return None
+            delta = (series[-1].numeric_score_100 or 0) - (series[0].numeric_score_100 or 0)
+            return "improving" if delta > 0 else "declining" if delta < 0 else "stable"
+
+        flagged = [a for a in answers if a.raw_score_1_to_4 is not None and a.raw_score_1_to_4 <= 2]
+
+        return {
+            "meal_consistency_trend": trend_for("w_03") or trend_for("m_03"),
+            "hydration_energy_trend": trend_for("w_04") or trend_for("d0_04"),
+            "skipped_meals_or_low_hydration_flags_60d": len(flagged),
+            "checkins_logged_60d": len({a.checkin_date for a in answers}),
         }
 
     async def get_leadership_dashboard(self) -> dict[str, Any]:

@@ -20,6 +20,29 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# DOCX (Developer Acceptance Rules for Scoring): "Every provider-facing plan
+# link must state whether it is an SCS recommendation, PT/IM review item,
+# joint coordination item, specialist routing item, or user-only
+# recommendation." A real, constrained field for that 5-way split - distinct
+# from `provider_action_type` (routing-rule-table vocabulary) and
+# `specialist_route` (dashboard-queue filter), which already carry other
+# meanings and shouldn't be overloaded.
+PLAN_LINK_CATEGORIES = (
+    "scs_recommendation",
+    "ptim_review_item",
+    "joint_coordination_item",
+    "specialist_routing_item",
+    "user_only_recommendation",
+)
+
+# Not DOCX-sourced - the ascend-admin frontend's PT/IM "SCS" tab and SCS
+# page both show a "Send to PT/IM" sign-off workflow with its own state,
+# distinct from a recommendation's ordinary status. Only ever moves past
+# "not_required" for a `joint_coordination_item` (see
+# `RecommendationService.send_for_signoff`/`sign_off`).
+COORDINATION_SIGNOFF_STATUSES = ("not_required", "pending_signoff", "signed_off")
+
+
 class Recommendation(Document):
     """A single traceable readiness recommendation or assigned action for one user."""
 
@@ -36,6 +59,10 @@ class Recommendation(Document):
     provider_action_type: str
     specialist_route: str | None = None
     route_level: str | None = None
+    plan_link_category: str | None = None
+    coordination_signoff_status: str = "not_required"
+    signed_off_by: PydanticObjectId | None = None
+    signed_off_at: datetime | None = None
     follow_up_timeline: str
     status: str = "active"
     assigned_provider_name: str | None = None

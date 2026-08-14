@@ -20,13 +20,14 @@ different Admin/Superadmin must then approve it before it takes effect.
 
 from __future__ import annotations
 
+import secrets
 from datetime import timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
 
 from app.core.roles import ADMIN_ROLES, ROLE_SUPERADMIN, SUPPORTED_ROLES, normalize_role
-from app.core.security import utc_now
+from app.core.security import get_password_hash, utc_now
 from app.core.support_pathways import get_support_pathway
 from app.services.auth_service import ACCESS_EXPIRY_DAYS
 from app.models.team_assignment import TeamAssignment
@@ -34,6 +35,7 @@ from app.models.user import User
 from app.schemas.admin_user import ProviderAssignRequest, RoleChangeRequest, UnitAssignRequest
 from app.services.admin_confirmation_service import AdminConfirmationService
 from app.services.audit_log_service import AuditLogService
+from app.services.email_service import EmailService
 
 STATUS_ENABLED = "enabled"
 STATUS_LOCKED_ON = "locked_on"
@@ -50,6 +52,7 @@ class AdminUserService:
     def __init__(self) -> None:
         self.audit_log_service = AuditLogService()
         self.admin_confirmation_service = AdminConfirmationService()
+        self.email_service = EmailService()
 
     async def list_users(self, role_filter: str | None = None) -> dict[str, Any]:
         """Return every user, optionally filtered by role."""
@@ -158,6 +161,46 @@ class AdminUserService:
             },
         )
         return self._serialize(target)
+
+    async def reset_password(self, admin: User, user_id: str) -> dict[str, Any]:
+        """Admin generates a real temp password and emails it to the user.
+
+        Not DOCX-sourced - the `ascend-admin` frontend mock shows the temp
+        password directly to the admin; here it's deliberately never
+        returned in the response or written to the audit log - only
+        emailed, via the real `EmailService.send()` (Resend) built earlier
+        this session, matching the "no fabricated success" pattern already
+        used for `SmsService`/`PushService` (honest `False` if unconfigured,
+        never a silently skipped or fake-success delivery). Ungated - no
+        caseload-reassignment consequence like a `deactivation`, and
+        immediately self-correctable by the user via the normal
+        forgot-password flow, unlike an admin-level `change_role`.
+        """
+        target = await User.get(user_id)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+        temp_password = secrets.token_urlsafe(9)
+        target.hashed_password = get_password_hash(temp_password)
+        target.updated_at = utc_now()
+        await target.save()
+
+        await self.audit_log_service.record(
+            event_type="admin_password_reset",
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_entity_type="user",
+            target_entity_id=str(target.id),
+            summary_message=f"Admin reset password for {target.email}.",
+        )
+
+        emailed = await self.email_service.send(
+            target.email,
+            "Your Ascend password has been reset",
+            f"<p>An administrator reset your password. Your temporary password is: <b>{temp_password}</b></p>"
+            "<p>Sign in and change it as soon as possible.</p>",
+        )
+        return {**self._serialize(target), "emailed": emailed}
 
     async def assign_unit(self, admin: User, user_id: str, payload: UnitAssignRequest) -> dict[str, Any]:
         """Admin assigns a user to a unit. Audit logged."""

@@ -9,8 +9,11 @@ from beanie import PydanticObjectId
 
 from app.core.roles import ROLE_PTIM, ROLE_SCS
 from app.models.coverage_log import CoverageLog
+from app.models.org_unit import OrgUnit
+from app.models.reconditioning_plan import ReconditioningPlan
 from app.models.user import User
 from app.schemas.coverage_log import CoverageLogCreate
+from app.services.role_admin_service import RoleAdminService
 
 PRS_EVIDENCE_ROLES = (ROLE_SCS, ROLE_PTIM)
 
@@ -32,6 +35,9 @@ def _as_object_id(provider_id: Any) -> PydanticObjectId:
 
 class CoverageService:
     """Log and list provider coverage-hours entries."""
+
+    def __init__(self) -> None:
+        self.role_admin_service = RoleAdminService()
 
     async def create(self, logged_by: Any, payload: CoverageLogCreate) -> dict[str, Any]:
         """Log a block of coverage hours for a provider."""
@@ -116,6 +122,50 @@ class CoverageService:
             ),
             "missed_count": len(missed_entries),
             "missed_by_reason": missed_by_reason,
+        }
+
+    async def get_reconditioning_load_by_flight(self) -> dict[str, Any]:
+        """Real per-flight reconditioning/rehab caseload, k-gated - never a per-operator list.
+
+        Not DOCX-sourced - the ascend-admin frontend's SCS "Workload by
+        flight" table also shows "PT/OFT lanes" and "Capacity" columns with
+        no real data source anywhere (no lane taxonomy, no capacity number
+        tracked for any flight/provider) - those are deliberately not
+        built. This surfaces only the real, honestly-derivable slice: how
+        many of a flight's real members currently have an active
+        `ReconditioningPlan`, and that count as a real percentage of the
+        flight's real cohort size. Same k-gated flight-grouping shape as
+        `LeadershipAggregateService.get_flight_comparison`.
+        """
+        scope_config = await self.role_admin_service.get_scope_config(ROLE_SCS)
+        cohort_k = scope_config["cohort_k"]
+        flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
+        active_plans = await ReconditioningPlan.find(ReconditioningPlan.phase != "completed").to_list()
+        active_user_ids = {p.user_id for p in active_plans}
+
+        rows: list[dict[str, Any]] = []
+        for flight in flights:
+            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            cohort_size = len(members)
+            if cohort_size < cohort_k:
+                continue
+            active_count = sum(1 for m in members if m.id in active_user_ids)
+            rows.append(
+                {
+                    "flight_id": str(flight.id),
+                    "flight_name": flight.name,
+                    "cohort_size": cohort_size,
+                    "active_reconditioning_count": active_count,
+                    "load_pct": round(active_count / cohort_size * 100, 1),
+                }
+            )
+
+        rows.sort(key=lambda item: item["flight_name"])
+        return {
+            "min_cohort_size": cohort_k,
+            "total_flights": len(flights),
+            "flights_meeting_cohort_minimum": len(rows),
+            "flights": rows,
         }
 
     async def export_prs_evidence(self, year: int) -> list[dict[str, Any]]:

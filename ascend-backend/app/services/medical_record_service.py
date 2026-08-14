@@ -12,6 +12,12 @@ half-built summary path that doesn't really enforce "minimum necessary."
 Every upload and every subsequent view/download/review writes an append-
 only `MedicalRecordAccessEvent`, matching the DOCX's "audit logging for
 every upload/view/download/export" requirement.
+
+If an admin does widen a record's access to a non-clinical role via
+`update_access_level`, that role gets a masked view (DOCX Section 15:
+"support document masking or redaction... before information is shared
+with non-clinical roles") rather than the raw record - see
+`CLINICAL_VIEW_ROLES`/`REDACTABLE_FIELDS`/`reveal_field`.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from app.core.support_pathways import get_support_pathway
 from app.models.medical_record import MedicalRecord, MedicalRecordAccessEvent
 from app.models.team_assignment import TeamAssignment
 from app.models.user import User
-from app.schemas.medical_record import DOCUMENT_TYPES, MIN_ACCESS_REASON_LENGTH
+from app.schemas.medical_record import DOCUMENT_TYPES, MIN_ACCESS_REASON_LENGTH, REASON_CATEGORIES
 from app.services.file_storage_service import FileStorageService, scan_file_stub
 from app.services.notification_service import NotificationService
 
@@ -42,6 +48,18 @@ FILE_TYPE_BY_EXTENSION = {
 }
 
 VIEW_ALLOWED_ROLES = {ROLE_PTIM, *ADMIN_ROLES}
+
+# DOCX Section 15: "Support document masking or redaction where needed
+# before information is shared with non-clinical roles" / "masking/redaction
+# before medical-history information is shared with SCS, nutrition, mental
+# performance, or other non-clinical support pathways." PT/IM and Admin are
+# the clinical/oversight roles this doesn't apply to - any other role that
+# reaches a record only gets there via an admin explicitly widening
+# `approved_access_level`, and now gets a masked view by default instead of
+# the raw one.
+CLINICAL_VIEW_ROLES = VIEW_ALLOWED_ROLES
+REDACTABLE_FIELDS = ("file_name", "access_reason")
+REDACTED_PLACEHOLDER = "[redacted - reveal with reason]"
 
 # Not DOCX-sourced cadence (DOCX line 147/211 names "retention status" as a
 # required field but not a specific window) - own reasonable default, same
@@ -115,7 +133,7 @@ class MedicalRecordService:
                 "quarantine",
                 "File type failed the malware/type scan stub - quarantined, not available for review or download.",
             )
-            return await self._serialize_detail(record)
+            return await self._serialize_detail(record, viewer_role=user.role, is_owner=True)
 
         await self._log_event(record.id, user.id, user.role, "upload", access_reason)
 
@@ -129,7 +147,7 @@ class MedicalRecordService:
 
         await self._notify_assigned_ptim(user, record)
 
-        return await self._serialize_detail(record)
+        return await self._serialize_detail(record, viewer_role=user.role, is_owner=True)
 
     async def list_for_user(
         self, user: User, document_type_filter: str | None, search: str | None
@@ -147,9 +165,10 @@ class MedicalRecordService:
     async def get_detail(self, user: User, record_id: str) -> dict[str, Any]:
         """Return a record's full detail + access log, logging this view."""
         record = await self._get_viewable(user, record_id)
-        if user.id != record.user_id:
+        is_owner = user.id == record.user_id
+        if not is_owner:
             await self._log_event(record.id, user.id, user.role, "view_record", "Opened record for review")
-        return await self._serialize_detail(record)
+        return await self._serialize_detail(record, viewer_role=user.role, is_owner=is_owner)
 
     async def get_file(self, user: User, record_id: str) -> tuple[bytes, str]:
         """Return decrypted file bytes + filename, logging this download."""
@@ -158,6 +177,14 @@ class MedicalRecordService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This record is quarantined and is not available for download.",
+            )
+        if user.id != record.user_id and user.role not in CLINICAL_VIEW_ROLES:
+            # DOCX: non-clinical roles never get raw documents, masked or not
+            # - metadata can be redacted, a binary file cannot.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Raw file downloads are restricted to PT/IM and Admin. "
+                "Non-clinical roles receive masked metadata only.",
             )
         await self._log_event(record.id, user.id, user.role, "download", "Downloaded file")
         return self.storage.read_file(record.storage_path), record.file_name
@@ -187,7 +214,7 @@ class MedicalRecordService:
         await self._log_event(
             record.id, reviewer.id, reviewer.role, "review_approved" if approve else "review_denied", note
         )
-        return await self._serialize_detail(record)
+        return await self._serialize_detail(record, viewer_role=reviewer.role, is_owner=False)
 
     async def _get_viewable(self, user: User, record_id: str) -> MedicalRecord:
         """Return a record if the user is its owner or on its real approved access list."""
@@ -224,7 +251,7 @@ class MedicalRecordService:
             "access_level_updated",
             f"Approved access level changed from {old_access} to {approved_access_level}.",
         )
-        return await self._serialize_detail(record)
+        return await self._serialize_detail(record, viewer_role=admin.role, is_owner=False)
 
     async def _notify_assigned_ptim(self, user: User, record: MedicalRecord) -> None:
         """Notify the user's assigned PT/IM that a new record is pending review."""
@@ -268,8 +295,44 @@ class MedicalRecordService:
             "reviewed_at": record.reviewed_at.isoformat() if record.reviewed_at else None,
         }
 
-    async def _serialize_detail(self, record: MedicalRecord) -> dict[str, Any]:
-        """Convert a record to its full-detail transport-safe dict, including the access log."""
+    async def reveal_field(
+        self, viewer: User, record_id: str, field_name: str, reason: str, reason_category: str
+    ) -> dict[str, Any]:
+        """A masked viewer's reason-required, one-time reveal of a single redacted field.
+
+        Not a persisted unmask - the next `get_detail` call is masked again
+        for this viewer. Every call is audit-logged, same as every other
+        action on this model. `reason_category` is real and auditable (see
+        `REASON_CATEGORIES`), not just a UI-only radio button.
+        """
+        record = await self._get_viewable(viewer, record_id)
+        if field_name not in REDACTABLE_FIELDS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That field cannot be revealed.")
+        if reason_category not in REASON_CATEGORIES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown reason category.")
+        reason = reason.strip()
+        if len(reason) < MIN_ACCESS_REASON_LENGTH:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Reveal reason must be at least {MIN_ACCESS_REASON_LENGTH} characters.",
+            )
+        await self._log_event(
+            record.id, viewer.id, viewer.role, "field_unredacted", f"[{reason_category}] {field_name}: {reason}"
+        )
+        return {"field_name": field_name, "value": getattr(record, field_name), "reason_category": reason_category}
+
+    async def _serialize_detail(
+        self, record: MedicalRecord, *, viewer_role: str, is_owner: bool
+    ) -> dict[str, Any]:
+        """Convert a record to its full-detail transport-safe dict, including the access log.
+
+        `viewer_role`/`is_owner` decide masking (DOCX Section 15) - the
+        owner and any `CLINICAL_VIEW_ROLES` viewer get the raw record; any
+        other viewer (only reachable via an admin-widened
+        `approved_access_level`) gets `REDACTABLE_FIELDS` masked, revealable
+        one field at a time via `reveal_field`.
+        """
+        is_redacted = not is_owner and viewer_role not in CLINICAL_VIEW_ROLES
         uploader = await User.get(record.uploaded_by)
         reviewer = await User.get(record.reviewed_by) if record.reviewed_by else None
         events = await MedicalRecordAccessEvent.find(
@@ -285,7 +348,7 @@ class MedicalRecordService:
                     "actor_name": actor.full_name if actor else "system",
                     "actor_role": event.actor_role,
                     "action": event.action,
-                    "note": event.note,
+                    "note": REDACTED_PLACEHOLDER if is_redacted else event.note,
                     "created_at": event.created_at.isoformat(),
                 }
             )
@@ -293,11 +356,11 @@ class MedicalRecordService:
         return {
             "id": str(record.id),
             "document_type": record.document_type,
-            "file_name": record.file_name,
+            "file_name": REDACTED_PLACEHOLDER if is_redacted else record.file_name,
             "file_type": record.file_type,
             "file_size_bytes": record.file_size_bytes,
             "status": record.status,
-            "access_reason": record.access_reason,
+            "access_reason": REDACTED_PLACEHOLDER if is_redacted else record.access_reason,
             "uploaded_by_name": uploader.full_name if uploader else None,
             "uploaded_at": record.uploaded_at.isoformat(),
             "reviewed_by_name": reviewer.full_name if reviewer else None,
@@ -307,5 +370,6 @@ class MedicalRecordService:
             "source": record.source,
             "consent_status": record.consent_status,
             "approved_access_level": record.approved_access_level,
+            "is_redacted": is_redacted,
             "access_log": access_log,
         }

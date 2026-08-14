@@ -22,6 +22,7 @@ from fastapi import HTTPException, status
 
 from app.core.roles import ADMIN_ROLES, ROLE_LEADERSHIP, ROLE_PTIM, ROLE_SCS, SPECIALIST_ROLES
 from app.core.security import utc_now
+from app.models.idmt_handoff import IdmtHandoff
 from app.models.pending_confirmation import PendingConfirmation
 from app.models.report_export import ReportExport
 from app.models.team_assignment import TeamAssignment
@@ -214,6 +215,12 @@ class AdminConfirmationService:
             export_log.export_log_status = "approved"
             export_log.lifecycle_status = "ready"
             await export_log.save()
+        elif confirmation.action_type == "idmt_handoff":
+            handoff = await IdmtHandoff.get(confirmation.target_entity_id)
+            if handoff is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Handoff not found.")
+            handoff.status = "approved"
+            await handoff.save()
 
         confirmation.status = "approved"
         confirmation.reviewed_by = reviewer.id
@@ -248,6 +255,11 @@ class AdminConfirmationService:
             if export_log is not None:
                 export_log.export_log_status = "rejected"
                 await export_log.save()
+        elif confirmation.action_type == "idmt_handoff":
+            handoff = await IdmtHandoff.get(confirmation.target_entity_id)
+            if handoff is not None:
+                handoff.status = "rejected"
+                await handoff.save()
 
         await self.audit_log_service.record(
             event_type=f"{confirmation.action_type}_rejected",
@@ -303,10 +315,10 @@ class AdminConfirmationService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Confirmation not found.")
         if confirmation.status != "approved":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only approved actions can be reverted.")
-        if confirmation.action_type == "export":
+        if confirmation.action_type in ("export", "idmt_handoff"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Exports cannot be reverted once approved.",
+                detail=f"{confirmation.action_type.replace('_', ' ').title()}s cannot be reverted once approved.",
             )
 
         target = await User.get(confirmation.target_entity_id)

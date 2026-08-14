@@ -58,3 +58,14 @@ class AccessLevelUpdateRequest(BaseModel):
     """Admin narrows/sets a specific record's real approved-access role list."""
 
     approved_access_level: list[str] = Field(min_length=1)
+
+
+REASON_CATEGORIES = ("routine", "escalation", "follow_up", "audit", "other")
+
+
+class RevealFieldRequest(BaseModel):
+    """A non-clinical viewer's reason-required, one-time reveal of a masked field."""
+
+    field_name: str
+    reason: str = Field(min_length=MIN_ACCESS_REASON_LENGTH, max_length=500)
+    reason_category: str = Field(pattern="^(" + "|".join(REASON_CATEGORIES) + ")$")

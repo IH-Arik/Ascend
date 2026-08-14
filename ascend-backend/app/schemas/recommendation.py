@@ -18,6 +18,10 @@ class RecommendationResponse(BaseModel):
     provider_action_type: str
     specialist_route: str | None
     route_level: str | None = None
+    plan_link_category: str | None = None
+    coordination_signoff_status: str = "not_required"
+    signed_off_by_name: str | None = None
+    signed_off_at: str | None = None
     follow_up_timeline: str
     trigger_reason: str
     status: str
@@ -48,3 +52,8 @@ class AssignActionRequest(BaseModel):
     steps: list[ActionStep] = Field(default_factory=list)
     due_date: date | None = None
     follow_up_timeline: str = "Next check-in"
+    # DOCX: "Joint PT/IM-SCS Coordination: any item where pain, limitation,
+    # failed OFT, recovery decline, or uploaded medical history affects
+    # training plan decisions." A real judgment call at assignment time, not
+    # auto-inferred from the assigned role.
+    is_joint_coordination: bool = False
