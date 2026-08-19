@@ -6,6 +6,8 @@ import secrets
 from typing import Any
 
 from fastapi import HTTPException, status
+from beanie.exceptions import CollectionWasNotInitialized
+from pymongo.errors import PyMongoError
 
 from app.core.config import get_settings
 from app.core.roles import ROLE_SUPERADMIN, normalize_role
@@ -48,7 +50,14 @@ class AuthService:
 
     async def register_user(self, payload: RegisterRequest) -> dict[str, Any]:
         """Register a user and issue auth tokens."""
-        existing_user = await User.find_one({"email": payload.email.lower()})
+        try:
+            existing_user = await User.find_one({"email": payload.email.lower()})
+        except (PyMongoError, CollectionWasNotInitialized, OSError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database is temporarily unavailable. Please try again shortly.",
+            ) from exc
+
         verification_code = self._generate_code()
         expires_at = utc_now() + timedelta(minutes=CODE_EXPIRY_MINUTES)
 
@@ -60,35 +69,41 @@ class AuthService:
 
         resolved_role = self._resolve_role(payload)
 
-        if existing_user is not None:
-            existing_user.full_name = payload.full_name
-            existing_user.role = resolved_role
-            existing_user.is_active = True
-            existing_user.is_verified = False
-            existing_user.hashed_password = get_password_hash(payload.password)
-            existing_user.onboarding_completed = False
-            existing_user.email_verification_code = verification_code
-            existing_user.email_verification_expires_at = expires_at
-            existing_user.password_reset_code = None
-            existing_user.password_reset_expires_at = None
-            existing_user.activation_date = utc_now()
-            existing_user.deactivation_date = None
-            existing_user.access_expires_at = utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS)
-            existing_user.updated_at = utc_now()
-            await existing_user.save()
-            user = existing_user
-        else:
-            user = User(
-                email=payload.email.lower(),
-                full_name=payload.full_name,
-                role=resolved_role,
-                hashed_password=get_password_hash(payload.password),
-                email_verification_code=verification_code,
-                email_verification_expires_at=expires_at,
-                activation_date=utc_now(),
-                access_expires_at=utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS),
-            )
-            await user.insert()
+        try:
+            if existing_user is not None:
+                existing_user.full_name = payload.full_name
+                existing_user.role = resolved_role
+                existing_user.is_active = True
+                existing_user.is_verified = False
+                existing_user.hashed_password = get_password_hash(payload.password)
+                existing_user.onboarding_completed = False
+                existing_user.email_verification_code = verification_code
+                existing_user.email_verification_expires_at = expires_at
+                existing_user.password_reset_code = None
+                existing_user.password_reset_expires_at = None
+                existing_user.activation_date = utc_now()
+                existing_user.deactivation_date = None
+                existing_user.access_expires_at = utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS)
+                existing_user.updated_at = utc_now()
+                await existing_user.save()
+                user = existing_user
+            else:
+                user = User(
+                    email=payload.email.lower(),
+                    full_name=payload.full_name,
+                    role=resolved_role,
+                    hashed_password=get_password_hash(payload.password),
+                    email_verification_code=verification_code,
+                    email_verification_expires_at=expires_at,
+                    activation_date=utc_now(),
+                    access_expires_at=utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS),
+                )
+                await user.insert()
+        except (PyMongoError, CollectionWasNotInitialized, OSError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database is temporarily unavailable. Please try again shortly.",
+            ) from exc
 
         self._log_delivery_code("verification", user.email, verification_code)
         return self._build_token_response(user)
@@ -115,23 +130,31 @@ class AuthService:
         user_agent: str | None = None,
     ) -> dict[str, Any]:
         """Authenticate a user and return issued tokens."""
-        user = await self._authenticate_user(payload, ip_address, user_agent)
-        user.last_login_at = utc_now()
-        user.updated_at = utc_now()
-        await user.save()
-        await self.audit_log_service.record(
-            event_type="login_success",
-            actor_id=user.id,
-            actor_role=user.role,
-            target_entity_type="user",
-            target_entity_id=str(user.id),
-            summary_message="Successful login.",
-            metadata_payload={
-                "method": "password",
-                "ip_address": ip_address,
-                "user_agent": user_agent,
-            },
-        )
+        try:
+            user = await self._authenticate_user(payload, ip_address, user_agent)
+            user.last_login_at = utc_now()
+            user.updated_at = utc_now()
+            await user.save()
+            await self.audit_log_service.record(
+                event_type="login_success",
+                actor_id=user.id,
+                actor_role=user.role,
+                target_entity_type="user",
+                target_entity_id=str(user.id),
+                summary_message="Successful login.",
+                metadata_payload={
+                    "method": "password",
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
+                },
+            )
+        except HTTPException:
+            raise
+        except (PyMongoError, CollectionWasNotInitialized, OSError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database is temporarily unavailable. Please try again shortly.",
+            ) from exc
         return self._build_token_response(user, remember_me=payload.remember_me)
 
     async def refresh_token(self, payload: RefreshRequest) -> dict[str, Any]:

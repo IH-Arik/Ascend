@@ -124,7 +124,7 @@ async def init_db() -> None:
                 SpecialistNote,
             ],
         )
-    except PyMongoError:
+    except Exception:
         await close_db()
         if settings.db_required:
             raise
@@ -138,7 +138,7 @@ async def close_db() -> None:
     global client, database
 
     if client is not None:
-        client.close()
+        await client.aclose()
     client = None
     database = None
 
