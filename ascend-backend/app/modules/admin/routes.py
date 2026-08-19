@@ -5,7 +5,7 @@ from typing import Any
 import time
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, Response, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
 
 from app.api.deps import require_roles
@@ -162,7 +162,11 @@ async def reject_deactivation_request(
     return success_response("Deactivation request rejected.", data)
 
 
-@router.post("/org-units", summary="Create a real org unit (Wing/Detachment/Flight)")
+@router.post(
+    "/org-units",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a real org unit (Wing/Detachment/Flight)",
+)
 async def create_org_unit(
     payload: OrgUnitCreate,
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
@@ -258,7 +262,11 @@ async def audit_log_live_tail(websocket: WebSocket, token: str = "") -> None:
         await stream.close()
 
 
-@router.post("/scheduled-exports", summary="Create a real recurring export schedule")
+@router.post(
+    "/scheduled-exports",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a real recurring export schedule",
+)
 async def create_scheduled_export(
     payload: ScheduledExportCreate,
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
@@ -607,7 +615,11 @@ async def assign_user_unit(
     return success_response("Unit updated successfully.", data)
 
 
-@router.post("/users/{user_id}/deactivate", summary="Request deactivation of a provider/admin-level account")
+@router.post(
+    "/users/{user_id}/deactivate",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request deactivation of a provider/admin-level account",
+)
 async def request_user_deactivation(
     user_id: str,
     payload: AdminDeactivationRequest,
@@ -665,7 +677,11 @@ async def assign_user_provider(
 # --- Provider credential / certification tracker ---
 
 
-@router.post("/credentials", summary="Add a provider credential/certification")
+@router.post(
+    "/credentials",
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a provider credential/certification",
+)
 async def add_credential(
     payload: CredentialCreate,
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
@@ -687,7 +703,11 @@ async def list_credentials(
 # --- Equipment and Supply Gap Tracker (DOCX 8.7) ---
 
 
-@router.post("/equipment-gaps", summary="Log an equipment/supply gap")
+@router.post(
+    "/equipment-gaps",
+    status_code=status.HTTP_201_CREATED,
+    summary="Log an equipment/supply gap",
+)
 async def create_equipment_gap(
     payload: EquipmentGapCreate,
     current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
@@ -721,7 +741,11 @@ async def update_equipment_gap(
 # --- Utilization events (feeds the Utilization Report) ---
 
 
-@router.post("/utilization-events", summary="Log a utilization event")
+@router.post(
+    "/utilization-events",
+    status_code=status.HTTP_201_CREATED,
+    summary="Log a utilization event",
+)
 async def create_utilization_event(
     payload: UtilizationEventCreate,
     current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
@@ -744,7 +768,11 @@ async def list_utilization_events(
 # --- Provider coverage-hours log (feeds the PRS/QCP Support Report) ---
 
 
-@router.post("/coverage-logs", summary="Log provider coverage hours")
+@router.post(
+    "/coverage-logs",
+    status_code=status.HTTP_201_CREATED,
+    summary="Log provider coverage hours",
+)
 async def create_coverage_log(
     payload: CoverageLogCreate,
     current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
@@ -777,7 +805,11 @@ async def get_reconditioning_load_by_flight(
 # --- Admin-configurable OPS scoring weights/thresholds ---
 
 
-@router.post("/scoring-config", summary="Create a new versioned scoring configuration")
+@router.post(
+    "/scoring-config",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new versioned scoring configuration",
+)
 async def create_scoring_config(
     payload: ScoringConfigCreate,
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
@@ -799,7 +831,11 @@ async def list_scoring_configs(
 # --- Admin-configurable recommendation trigger thresholds ---
 
 
-@router.post("/recommendation-thresholds", summary="Create a new versioned recommendation threshold configuration")
+@router.post(
+    "/recommendation-thresholds",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new versioned recommendation threshold configuration",
+)
 async def create_recommendation_threshold_config(
     payload: RecommendationThresholdConfigCreate,
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
