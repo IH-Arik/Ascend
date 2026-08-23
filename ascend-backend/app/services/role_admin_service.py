@@ -37,6 +37,20 @@ implemented - was built alongside this change
 matrix's fourth real cell state, `conditional`, for a role that genuinely
 reaches a capability but receives a deliberately minimum-necessary subset
 rather than all-or-nothing.
+
+IMPORTANT - the matrix is now a DECLARED POLICY view, not a reflection of
+runtime enforcement (2026-08-23). `DECLARED_MATRIX` is transcribed
+cell-for-cell from the Roles & RBAC design and is what `matrix` returns.
+The product owner chose this explicitly after being shown the full list of
+cells where the design disagrees with what the code actually permits - for
+example the design shows Operator as unable to view their own dashboard
+(the real route has no role gate at all) and SCS as conditionally able to
+view aggregate trends (the real route would 403 them). Rather than silently
+serving either version as "the truth", `get_matrix` returns all three:
+`matrix` (declared, for display), `enforced` (what each capability's real
+route gate produces, computed by `_enforced_cell`), and `divergences` (the
+explicit list of disagreements). Anything making an actual access decision
+must use the real route gates, never this matrix.
 """
 
 from __future__ import annotations
@@ -128,6 +142,67 @@ CONDITIONAL_CELLS: set[tuple[str, str]] = {
     for role in (ROLE_SCS, *SPECIALIST_ROLES, ROLE_LEADERSHIP, *ADMIN_ROLES)
 }
 
+# The screen's 10 display columns. `role` maps a column to the real
+# `SUPPORTED_ROLES` value it represents; `None` means the column is
+# display-only with no backing role - see `Plan` below. ADMIN covers both
+# real admin-level roles, which the screen does not separate.
+MATRIX_COLUMNS: list[dict[str, Any]] = [
+    {"key": "OPERATOR", "label": "Operator", "role": "Airman"},
+    {"key": "SCS", "label": "SCS", "role": ROLE_SCS},
+    {"key": "PT/IM", "label": "PT/IM", "role": ROLE_PTIM},
+    {"key": "MP", "label": "Mental Performance", "role": "Mental Performance"},
+    {"key": "NUTR", "label": "Nutritionist", "role": "Nutritionist"},
+    {"key": "PURPOSE", "label": "Purpose Coach", "role": ROLE_CHAPLAIN},
+    # Display-only. `Plan` is deliberately NOT in `SUPPORTED_ROLES` - that
+    # tuple drives real auth (`require_roles`, registration validation, the
+    # People directory's role list), so adding a role with no permissions,
+    # no dashboard, and no DOCX requirement would be a real system change,
+    # not a display one. Twice-confirmed skip decision (2026-08-09,
+    # 2026-08-13). The column renders; nothing can hold the role.
+    {"key": "PLAN", "label": "Plan", "role": None},
+    {"key": "LEAD", "label": "Leadership", "role": ROLE_LEADERSHIP},
+    {"key": "ADMIN", "label": "Admin", "role": "DWS Admin"},
+    {"key": "IDMT", "label": "IDMT", "role": ROLE_IDMT},
+]
+
+_F, _C, _G, _N = "full", "conditional", "gated", "none"
+
+# The policy matrix exactly as the Roles & RBAC screen declares it,
+# transcribed cell-for-cell from the design. Explicitly chosen by the
+# product owner over the enforcement-derived version after being shown the
+# full divergence list - see this module's docstring. `get_matrix` returns
+# the real enforced value alongside each row so the two never get confused.
+DECLARED_MATRIX: dict[str, dict[str, str]] = {
+    #                                     OPER  SCS  PT/IM  MP   NUTR PURP PLAN LEAD ADMIN IDMT
+    "View own dashboard":                 dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_N,  _F,  _F,  _F,  _F,  _F,  _F,  _F,  _F,  _N])),
+    "View caseload records":              dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_N,  _F,  _G,  _G,  _G,  _G,  _N,  _N,  _F,  _G])),
+    "View Authorized Performance Summary": dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_N,  _C,  _G,  _C,  _N,  _N,  _N,  _N,  _F,  _C])),
+    "Send message":                       dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_F,  _F,  _F,  _F,  _F,  _F,  _F,  _N,  _F,  _G])),
+    "Send IDMT handoff":                  dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_N,  _N,  _G,  _G,  _N,  _N,  _N,  _N,  _F,  _G])),
+    "Author plan":                        dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_N,  _F,  _F,  _F,  _F,  _F,  _F,  _N,  _F,  _N])),
+    "View aggregate trend":               dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_N,  _C,  _C,  _C,  _C,  _C,  _F,  _F,  _F,  _N])),
+    "Run export":                         dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_N,  _N,  _N,  _N,  _N,  _N,  _G,  _G,  _F,  _N])),
+    "Deactivate user":                    dict(zip(
+        [c["key"] for c in MATRIX_COLUMNS],
+        [_N,  _N,  _N,  _N,  _N,  _N,  _N,  _N,  _G,  _N])),
+}
+
 
 class RoleAdminService:
     """Build the real role catalog, RBAC matrix, and purpose-consent summary."""
@@ -169,24 +244,59 @@ class RoleAdminService:
         }
 
     async def get_matrix(self) -> dict[str, Any]:
-        """9 real capability rows x every real role, full/gated/none - each row's
-        access derived from its actual route-level `require_roles(...)` gate
-        (`CAPABILITY_ROLE_GATES`), not an inferred permission-string mapping.
+        """The Roles & RBAC screen's declared policy matrix (9 rows x 10 columns).
+
+        Returns `DECLARED_MATRIX` - the intended policy as shown on the
+        screen - alongside `enforced`, the cell each row's real route gate
+        would actually produce, and `divergences`, the explicit list of
+        cells where the two disagree. `matrix` is the display source; the
+        other two exist so the difference is inspectable rather than hidden.
         """
-        matrix = []
-        for capability, allowed_roles in CAPABILITY_ROLE_GATES.items():
-            cells = {}
-            for role in SUPPORTED_ROLES:
-                if (role, capability) in GATED_CELLS:
-                    cells[role] = "gated"
-                elif (role, capability) in CONDITIONAL_CELLS:
-                    cells[role] = "conditional"
-                elif allowed_roles is None or role in allowed_roles:
-                    cells[role] = "full"
-                else:
-                    cells[role] = "none"
-            matrix.append({"capability": capability, "roles": cells})
-        return {"roles": list(SUPPORTED_ROLES), "matrix": matrix}
+        matrix: list[dict[str, Any]] = []
+        divergences: list[dict[str, str]] = []
+
+        for capability in DECLARED_MATRIX:
+            declared = DECLARED_MATRIX[capability]
+            enforced: dict[str, str] = {}
+
+            for column in MATRIX_COLUMNS:
+                key = column["key"]
+                role = column["role"]
+                enforced[key] = (
+                    "unenforced" if role is None else self._enforced_cell(capability, role)
+                )
+                if enforced[key] != declared[key]:
+                    divergences.append(
+                        {
+                            "capability": capability,
+                            "column": key,
+                            "declared": declared[key],
+                            "enforced": enforced[key],
+                        }
+                    )
+
+            matrix.append(
+                {"capability": capability, "roles": dict(declared), "enforced": enforced}
+            )
+
+        return {
+            "roles": [c["key"] for c in MATRIX_COLUMNS],
+            "columns": MATRIX_COLUMNS,
+            "matrix": matrix,
+            "divergences": divergences,
+            "divergence_count": len(divergences),
+        }
+
+    def _enforced_cell(self, capability: str, role: str) -> str:
+        """What this capability's real route gate actually permits for `role`."""
+        if (role, capability) in GATED_CELLS:
+            return "gated"
+        if (role, capability) in CONDITIONAL_CELLS:
+            return "conditional"
+        allowed_roles = CAPABILITY_ROLE_GATES.get(capability)
+        if allowed_roles is None or role in allowed_roles:
+            return "full"
+        return "none"
 
     async def _purpose_consent_summary(self) -> dict[str, Any]:
         """Reuses the existing Chaplain/Purpose pathway toggle - no new model.
