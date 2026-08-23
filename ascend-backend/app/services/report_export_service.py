@@ -252,6 +252,7 @@ class ReportExportService:
             sensitivity_level=REPORT_SENSITIVITY.get(report_type, "controlled"),
             title=title or report_type.replace("_", " ").title(),
             flight_id=flight_id,
+            file_size_bytes=len(content_bytes),
         ).insert()
 
         return content_bytes, file_name
@@ -317,5 +318,6 @@ class ReportExportService:
             "lifecycle_status": r.lifecycle_status,
             "title": r.title,
             "flight_id": r.flight_id,
+            "file_size_bytes": r.file_size_bytes,
             "created_at": r.created_at.isoformat(),
         }

@@ -1064,6 +1064,9 @@ async def download_export(
         return Response(content="Unknown report type.", status_code=400)
     report_data = await builder()
     content_bytes, _ = report_export_service.render(export_log.report_type, report_data, export_log.export_format)
+    if export_log.file_size_bytes is None:
+        export_log.file_size_bytes = len(content_bytes)
+        await export_log.save()
     file_name = f"{export_log.report_type}_{export_log.date_range}.{export_log.export_format}"
     media_type = "application/pdf" if export_log.export_format == "pdf" else "text/csv"
     return Response(

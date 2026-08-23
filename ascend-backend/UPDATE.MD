@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-23, later still yet once more, again (a number that can't honestly exist until the thing it describes does)
+
+A short side panel this time, listing a handful of past exports, each with a file size next to it.
+
+Nothing tracks a size like that anywhere in this system. Simple enough to add — except this particular feature has an existing rule sitting right in its own documentation, written before today, that made the obvious approach wrong: these files are deliberately never saved anywhere after being built. Every time someone downloads one, it gets rebuilt fresh from live data, on purpose, specifically so nothing sensitive sits around in storage waiting to go stale or leak. So the file's actual size, at any given moment, is a fact that plainly doesn't exist yet for something that hasn't been rebuilt.
+
+That's fine for most of these exports — the ordinary ones get built and handed over in the same instant, so their size is known the moment they're created, with no separate step required. But some exports need a second person's sign-off before anyone can have them at all, and for those, nothing gets built until that approval happens and someone actually downloads it. Saving a size before that point wouldn't be estimating — it would be lying about something that hasn't happened yet.
+
+So the rule for this field became: record it exactly once, the moment real bytes are actually produced. For an ordinary export, that's immediately. For one still waiting on approval, the field simply reads "not yet known" — correctly — right up until someone approved it and someone downloaded it, at which point the exact real number finally exists and gets written down for good. Confirmed both cases the only way that actually proves anything: created one of each kind for real, watched the ordinary one report its size instantly, watched the restricted one sit empty through approval and only fill in the instant it was actually opened — and checked that number against the same file's real, independently-reported size on the way out the door. Matched exactly, both times.
+
 ## 2026-08-23, later still yet once more again (a label I'd already refused to copy, for a reason worth re-reading)
 
 One more popup on the same page: a confirmation dialog, showing five pieces of information about an action waiting for a second person's approval before it goes through — what it is, what it targets, what slice it covers, what it affects, and how risky it's rated.

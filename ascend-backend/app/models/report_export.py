@@ -12,6 +12,17 @@ established pattern rather than introducing a new violation.
 `lifecycle_status`/`title`/`flight_id` are real, additive (2026-08-10,
 Leadership "Reports" pass) - not DOCX-sourced. Existing rows default to
 `lifecycle_status="ready"`/`title=None`/`flight_id=None`, unaffected.
+
+`file_size_bytes` added 2026-08-23 (an Exports admin screen's "Recent
+exports" panel showed a size in MB with no backing anywhere). Set only
+where bytes are actually rendered - `ReportExportService.export_report`
+for an immediate export, and the export-log download route for a
+restricted export approved after the fact - never estimated or guessed;
+stays `None` for a `pending_approval` restricted export that has never
+been downloaded, since its real size genuinely isn't known yet. This
+does not conflict with `download_export`'s "re-render live, never store
+sensitive bytes at rest" design - only the resulting byte *count* is
+persisted, never the content itself.
 """
 
 from datetime import datetime, timezone
@@ -46,6 +57,7 @@ class ReportExport(Document):
     lifecycle_status: str = "ready"
     title: str | None = None
     flight_id: str | None = None
+    file_size_bytes: int | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
     class Settings:
