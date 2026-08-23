@@ -22,10 +22,21 @@ explicitly grant them. Caught when asked to double-check completeness
 across every Control Plane screen, not caught by the original live
 verification (which only spot-checked 2 of 9 rows). Rebuilt below directly
 from each capability's real route gate, with a citation on every entry, and
-2 rows dropped entirely ("Send IDMT handoff", "View Authorized Performance
-Summary") since neither corresponds to any real, implemented endpoint -
-keeping a fabricated-looking row for a feature that doesn't exist would be
-the same mistake again.
+2 rows dropped at that time ("Send IDMT handoff", "View Authorized
+Performance Summary") since neither corresponded to any real, implemented
+endpoint - keeping a fabricated-looking row for a feature that doesn't
+exist would be the same mistake again.
+
+Both rows are now restored (2026-08-23), because both features have since
+been genuinely built and that exclusion had gone stale: the IDMT handoff
+lifecycle landed 2026-08-13 (`IdmtHandoffService`), and the Medical History
+Performance Summary - a fully DOCX-specified entity (its own data-dictionary
+row and a per-role visibility row in Table 23) that had simply never been
+implemented - was built alongside this change
+(`app/services/performance_summary_service.py`). That also introduced the
+matrix's fourth real cell state, `conditional`, for a role that genuinely
+reaches a capability but receives a deliberately minimum-necessary subset
+rather than all-or-nothing.
 """
 
 from __future__ import annotations
@@ -41,6 +52,7 @@ from app.core.roles import (
     ROLE_SCOPE,
     ROLE_SCS,
     ROLE_CHAPLAIN,
+    ROLE_IDMT,
     SPECIALIST_ROLES,
     SUPPORTED_ROLES,
 )
@@ -79,11 +91,42 @@ CAPABILITY_ROLE_GATES: dict[str, tuple[str, ...] | None] = {
     # real require_roles(...) - the `GATED_CELLS` override below reflects
     # the real second-reviewer requirement on top of this base gate.
     "Deactivate user": ADMIN_ROLES,
+    # POST /admin/idmt-handoffs' real require_roles(*ADMIN_ROLES, ROLE_PTIM),
+    # plus IDMT's own acknowledge/download access. Previously dropped from
+    # this matrix as "no real, implemented endpoint" - that was true when
+    # written and is no longer: `IdmtHandoffService` and the full
+    # prepare/approve/transmit/acknowledge lifecycle were built 2026-08-13.
+    "Send IDMT handoff": (*ADMIN_ROLES, ROLE_PTIM, ROLE_IDMT),
+    # GET /performance-summaries/{user_id}'s real access. Every role with a
+    # DOCX Table 23 cell can reach the entity; what differs is how much of
+    # it they receive, which is what `CONDITIONAL_CELLS` below expresses.
+    "View Authorized Performance Summary": (
+        *ADMIN_ROLES,
+        ROLE_PTIM,
+        ROLE_SCS,
+        *SPECIALIST_ROLES,
+        ROLE_LEADERSHIP,
+    ),
 }
 
 # Real: matches `AdminUserService`/`AdminConfirmationService`'s second-
 # reviewer requirement for deactivating a provider/admin-level account.
 GATED_CELLS: set[tuple[str, str]] = {(role, "Deactivate user") for role in ADMIN_ROLES}
+# The IDMT handoff itself is second-reviewer gated before it can be
+# transmitted (`AdminConfirmationService`), so the preparing roles are
+# "gated", not "full".
+GATED_CELLS |= {(role, "Send IDMT handoff") for role in (*ADMIN_ROLES, ROLE_PTIM)}
+
+# Real "conditional (reason required / minimum-necessary)" cells - a role
+# genuinely reaches the capability but receives a deliberately reduced view,
+# rather than all-or-nothing. Derived from each role's real DOCX Table 23
+# cell as encoded in `PerformanceSummaryService.ROLE_VISIBLE_FIELDS`: PT/IM
+# is the authoring clinical role ("Yes", full), Admin is "Metadata; content
+# only if approved", and every other role gets a strict subset.
+CONDITIONAL_CELLS: set[tuple[str, str]] = {
+    (role, "View Authorized Performance Summary")
+    for role in (ROLE_SCS, *SPECIALIST_ROLES, ROLE_LEADERSHIP, *ADMIN_ROLES)
+}
 
 
 class RoleAdminService:
@@ -126,7 +169,7 @@ class RoleAdminService:
         }
 
     async def get_matrix(self) -> dict[str, Any]:
-        """7 real capability rows x every real role, full/gated/none - each row's
+        """9 real capability rows x every real role, full/gated/none - each row's
         access derived from its actual route-level `require_roles(...)` gate
         (`CAPABILITY_ROLE_GATES`), not an inferred permission-string mapping.
         """
@@ -136,6 +179,8 @@ class RoleAdminService:
             for role in SUPPORTED_ROLES:
                 if (role, capability) in GATED_CELLS:
                     cells[role] = "gated"
+                elif (role, capability) in CONDITIONAL_CELLS:
+                    cells[role] = "conditional"
                 elif allowed_roles is None or role in allowed_roles:
                     cells[role] = "full"
                 else:

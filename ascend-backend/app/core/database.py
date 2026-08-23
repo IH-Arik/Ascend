@@ -43,6 +43,7 @@ from app.models import RoleScopeConfig
 from app.models import ScheduledExport
 from app.models import SchedulerJobRun
 from app.models import ScoringConfig
+from app.models import PerformanceSummary
 from app.models import SpecialistNote
 from app.models import SupportRequest
 from app.models import TeamAssignment
@@ -121,6 +122,7 @@ async def init_db() -> None:
                 RomMeasurement,
                 ReconditioningEvent,
                 Restriction,
+                PerformanceSummary,
                 SpecialistNote,
             ],
         )

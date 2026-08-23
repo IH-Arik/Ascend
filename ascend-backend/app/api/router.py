@@ -14,6 +14,7 @@ from app.modules.messaging.routes import router as messaging_router
 from app.modules.notifications.routes import router as notifications_router
 from app.modules.oft.routes import router as oft_router
 from app.modules.onboarding.routes import router as onboarding_router
+from app.modules.performance_summaries.routes import router as performance_summaries_router
 from app.modules.records.routes import router as records_router
 from app.modules.recommendations.routes import router as recommendations_router
 from app.modules.roles.routes import router as roles_router
@@ -43,3 +44,4 @@ api_router.include_router(roles_router, prefix="/roles", tags=["roles"])
 api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(records_router, prefix="/records", tags=["records"])
 api_router.include_router(specialist_notes_router, prefix="/specialist-notes", tags=["specialist-notes"])
+api_router.include_router(performance_summaries_router, prefix="/performance-summaries", tags=["performance-summaries"])
