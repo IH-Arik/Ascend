@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-23, later still yet once more again, more (a button that only ever did half of what it says)
+
+Same page, one more piece — a table of recurring exports, each with an "Edit" link. Clicking it opens the exact same form used to create one in the first place, filled in with the existing values.
+
+Checked what actually happens on save, and found the real version of that button could only do one thing: turn a schedule on or off. Rename it, change how often it runs, switch its file format, change who it goes to — none of that had anywhere to go, even though the form asking for all of it was sitting right there, fully built, just never connected to anything that could act on more than the on/off switch.
+
+Widened it properly rather than bolting on a second endpoint: one real edit action now, where every field is optional and only the ones actually sent get touched — sending just the on/off switch, the way it always worked, still works exactly the same as before, so nothing that already depended on the old shape breaks. Changing how often something runs also recalculates when it's due to run next, the same math used when a schedule is first created, so it doesn't end up scheduled against a stale clock. What kind of report it produces stays fixed once created — the same form never lets someone change that either, so there was no reason to allow it underneath.
+
+Tested it the way that actually proves something changed: made a real schedule, edited four things about it in one request, and confirmed all four landed and the next-run date moved correctly. Sent nonsense for the two fields with real allowed values and watched both get correctly refused. Sent an edit with nothing different in it and confirmed it correctly did nothing — not even writing a pointless note to the record of changes. Checked the real log entry for the four-field edit and found it spelling out exactly what changed, old value next to new, for every one of them.
+
 ## 2026-08-23, later still yet once more, again (a number that can't honestly exist until the thing it describes does)
 
 A short side panel this time, listing a handful of past exports, each with a file size next to it.

@@ -43,7 +43,7 @@ from app.schemas.idmt_handoff import IdmtHandoffCreateRequest
 from app.schemas.org_unit import OrgUnitCreate
 from app.schemas.provider_credential import CredentialCreate
 from app.schemas.question_bank_version import QuestionBankVersionCreate
-from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportStatusUpdate
+from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportUpdate
 from app.schemas.recommendation_threshold_config import RecommendationThresholdConfigCreate
 from app.schemas.report_export import ReportLifecycleUpdate
 from app.schemas.scoring_config import ScoringConfigCreate
@@ -289,14 +289,14 @@ async def list_scheduled_exports(
     return success_response("Scheduled exports loaded successfully.", data)
 
 
-@router.patch("/scheduled-exports/{schedule_id}", summary="Pause or resume a real recurring export")
-async def update_scheduled_export_status(
+@router.patch("/scheduled-exports/{schedule_id}", summary="Edit a real recurring export (name/cadence/format/recipient/status)")
+async def update_scheduled_export(
     schedule_id: str,
-    payload: ScheduledExportStatusUpdate,
+    payload: ScheduledExportUpdate,
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
 ):
-    """Admin pauses or resumes a real schedule. Audit logged."""
-    data = await scheduled_export_service.set_status(current_user, schedule_id, payload.status)
+    """Admin edits a real schedule - only the fields given are changed. Audit logged."""
+    data = await scheduled_export_service.update(current_user, schedule_id, payload)
     return success_response("Scheduled export updated successfully.", data)
 
 

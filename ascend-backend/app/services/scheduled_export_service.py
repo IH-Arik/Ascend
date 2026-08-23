@@ -17,7 +17,7 @@ from fastapi import HTTPException, status
 from app.core.security import utc_now
 from app.models.scheduled_export import CADENCES, ScheduledExport
 from app.models.user import User
-from app.schemas.scheduled_export import ScheduledExportCreate
+from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportUpdate
 from app.services.admin_confirmation_service import AdminConfirmationService
 from app.services.audit_log_service import AuditLogService
 from app.services.leadership_aggregate_service import LeadershipAggregateService
@@ -108,26 +108,67 @@ class ScheduledExportService:
         schedules.sort(key=lambda s: s.next_run_at)
         return {"schedules": [self._serialize(s) for s in schedules]}
 
-    async def set_status(self, admin: User, schedule_id: str, new_status: str) -> dict[str, Any]:
-        """Admin pauses or resumes a real schedule. Audit logged."""
-        if new_status not in ("active", "paused"):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status must be 'active' or 'paused'.")
+    async def update(self, admin: User, schedule_id: str, payload: ScheduledExportUpdate) -> dict[str, Any]:
+        """Admin edits a real schedule - only the given fields change. Audit logged.
+
+        `report_type` (and therefore `sensitivity_level`) is deliberately
+        never editable here, matching the design's own Edit wizard.
+        """
         schedule = await ScheduledExport.get(schedule_id)
         if schedule is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found.")
 
-        old_status = schedule.status
-        schedule.status = new_status
+        changes: dict[str, tuple[Any, Any]] = {}
+
+        if payload.status is not None:
+            if payload.status not in ("active", "paused"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status must be 'active' or 'paused'.")
+            if payload.status != schedule.status:
+                changes["status"] = (schedule.status, payload.status)
+                schedule.status = payload.status
+
+        if payload.name is not None and payload.name != schedule.name:
+            changes["name"] = (schedule.name, payload.name)
+            schedule.name = payload.name
+
+        if payload.cadence is not None and payload.cadence != schedule.cadence:
+            if payload.cadence not in CADENCES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"message": "Unknown cadence.", "allowed": list(CADENCES)},
+                )
+            changes["cadence"] = (schedule.cadence, payload.cadence)
+            schedule.cadence = payload.cadence
+            schedule.next_run_at = _advance(utc_now(), payload.cadence)
+
+        if payload.export_format is not None and payload.export_format != schedule.export_format:
+            if payload.export_format not in ("csv", "pdf"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="export_format must be 'csv' or 'pdf'.")
+            changes["export_format"] = (schedule.export_format, payload.export_format)
+            schedule.export_format = payload.export_format
+
+        if payload.recipient_role is not None and payload.recipient_role != schedule.recipient_role:
+            changes["recipient_role"] = (schedule.recipient_role, payload.recipient_role)
+            schedule.recipient_role = payload.recipient_role
+
+        if not changes:
+            return self._serialize(schedule)
+
         schedule.updated_at = utc_now()
         await schedule.save()
 
+        event_type = "scheduled_export_updated"
+        if "status" in changes:
+            event_type = "scheduled_export_paused" if schedule.status == "paused" else "scheduled_export_resumed"
+
         await self.audit_log_service.record(
-            event_type="scheduled_export_paused" if new_status == "paused" else "scheduled_export_resumed",
+            event_type=event_type,
             actor_id=admin.id,
             actor_role=admin.role,
             target_entity_type="scheduled_export",
             target_entity_id=str(schedule.id),
-            summary_message=f"{schedule.name}: {old_status} -> {new_status}.",
+            summary_message=f"{schedule.name}: {', '.join(f'{k} {old} -> {new}' for k, (old, new) in changes.items())}.",
+            metadata_payload={k: {"old": old, "new": new} for k, (old, new) in changes.items()},
         )
         return self._serialize(schedule)
 
