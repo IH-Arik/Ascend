@@ -72,6 +72,7 @@ class IdmtHandoffService:
             target_entity_id=str(handoff.id),
             target_summary=f"{export_type} for {target.full_name or target.email}",
             consequence_summary=f"Documentation summary released to {ROLE_IDMT}",
+            scope_summary=f"{content_category} - {target.role}",
             payload={"export_type": export_type, "export_format": export_format},
         )
         await confirmation.insert()

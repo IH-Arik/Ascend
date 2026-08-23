@@ -30,7 +30,7 @@ def utc_now() -> datetime:
 class PendingConfirmation(Document):
     """A destructive admin action awaiting a second reviewer's approval."""
 
-    action_type: str  # "role_change" | "deactivation" | "export"
+    action_type: str  # "role_change" | "deactivation" | "export" | "idmt_handoff"
     status: str = "pending"  # pending | approved | rejected
     requested_by: PydanticObjectId
     requested_at: datetime = Field(default_factory=utc_now)
@@ -46,6 +46,15 @@ class PendingConfirmation(Document):
     target_entity_id: str
     target_summary: str
     consequence_summary: str
+    # Real, added 2026-08-23 - a Figma "Review Pending Request" modal showed
+    # a `SCOPE` field with no backing anywhere (`admin-store.ts` had it
+    # hardcoded per row). Computed once at request time from already-real
+    # data, same pattern as `target_summary`/`consequence_summary`: the
+    # affected user's role + unit for `role_change`/`deactivation`, content
+    # category + target role for `idmt_handoff`, sensitivity level +
+    # recipient role for `export`. `None` for any confirmation created
+    # before this field existed.
+    scope_summary: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     snapshot_before: dict[str, Any] = Field(default_factory=dict)
     executed_at: datetime | None = None

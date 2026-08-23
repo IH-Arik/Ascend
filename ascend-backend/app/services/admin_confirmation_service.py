@@ -67,6 +67,7 @@ class AdminConfirmationService:
             target_entity_id=str(target.id),
             target_summary=target.full_name or target.email,
             consequence_summary=f"Role change: {old_role} -> {new_role}",
+            scope_summary=f"{old_role} - {target.unit_id or 'no unit'}",
             payload={"new_role": new_role},
             snapshot_before={"role": old_role},
         )
@@ -106,6 +107,7 @@ class AdminConfirmationService:
             target_entity_id=str(target.id),
             target_summary=target.full_name or target.email,
             consequence_summary=f"{caseload_count} caseload{'s' if caseload_count != 1 else ''} reassigned",
+            scope_summary=f"{target.role} - {target.unit_id or 'no unit'}",
             payload={"reason": reason},
             snapshot_before={"is_active": target.is_active},
         )
@@ -155,6 +157,7 @@ class AdminConfirmationService:
             target_entity_id=str(export_log.id),
             target_summary=f"{report_type} ({date_range})",
             consequence_summary=f"{row_count} records - {sensitivity_level}",
+            scope_summary=f"{sensitivity_level} - {recipient_role or admin.role}",
             expires_at=utc_now() + timedelta(hours=EXPORT_APPROVAL_WINDOW_HOURS),
             payload={
                 "report_type": report_type,
@@ -383,6 +386,7 @@ class AdminConfirmationService:
             "target_entity_id": confirmation.target_entity_id,
             "target_summary": confirmation.target_summary,
             "consequence_summary": confirmation.consequence_summary,
+            "scope_summary": confirmation.scope_summary,
             "payload": confirmation.payload,
             "executed_at": confirmation.executed_at,
             "reverted_at": confirmation.reverted_at,

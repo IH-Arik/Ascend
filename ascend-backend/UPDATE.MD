@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-23, later still yet once more again (a label I'd already refused to copy, for a reason worth re-reading)
+
+One more popup on the same page: a confirmation dialog, showing five pieces of information about an action waiting for a second person's approval before it goes through — what it is, what it targets, what slice it covers, what it affects, and how risky it's rated.
+
+Same story on the button underneath it — clicking "approve" only erases a row from a list living in the browser tab, never actually approves anything for real. Two of the five fields already lined up closely with real information already tracked elsewhere. One field didn't line up at all, and going back to check why turned into the more interesting find of the two.
+
+The risk label on screen uses a short code — a letter and a number. Digging into the code that computes something similar for real turned up a comment already sitting there, written before today, explaining a decision already made: that exact style of code is deliberately avoided here, because the same letter-and-number pattern already means something completely different elsewhere in this system — a clinical escalation level tied to an individual's care. Reusing it for something as unrelated as export risk would be a genuinely dangerous kind of confusion in a system handling health data. So the real version uses plain words instead. That wasn't a gap. It was already correct, and re-reading the old reasoning confirmed it rather than changing anything.
+
+The other missing field — which slice of the organization or dataset something touches — had nothing behind it anywhere, and this one really was just missing. Filled it in from data that was already being tracked at the moment each of these approval requests gets created, just never summarized into one line before: whose role and unit for a role or account change, what kind of clinical content and whose for a records handoff, and how sensitive plus who it's going to for an export. Tested by actually creating one real request of every kind that requests, not by reading the code and assuming it would work — a real restricted export, a real account deactivation, a real clinical handoff, and a real admin-level role change — and checking that each one's summary line came back correct.
+
 ## 2026-08-23, later still yet again once more (chased a placeholder name back to where it actually lived)
 
 A modal this time — a form for scheduling a recurring export, with a field asking who it should go to and another asking what slice of data it covers.
