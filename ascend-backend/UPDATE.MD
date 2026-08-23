@@ -1,5 +1,13 @@
 # Update Log
 
+## 2026-08-23, later still one more time again (a promise made in a comment, never actually kept)
+
+One more page, one more set of four small number cards at the top. Checked the page's own code first this time, out of habit by now — all four are typed-in numbers, same as everything else today.
+
+But two of the four already had a real, working source behind them — a daily total and a comparison against the week's average, both computed correctly, just never connected to the screen. The third and fourth had nothing. And digging into the fourth one turned up something odd: the function that computes these numbers already had a sentence in it, written earlier, saying it returns a count of serious/reviewable actions. It didn't. It never had. Someone — past me — wrote down that the work was done before actually doing it, and nothing since had caught the gap until this exact card forced a re-read.
+
+The count itself wasn't a hard call to make correctly, once found — there's already a real queue in this system for actions serious enough to need a second person's sign-off, and its own internal description already calls itself exactly that: a queue for serious admin actions. Counting what's in it, and how much of it is still waiting on that second signature, is that promised number. Wired it in and checked it by hand against the same queue counted a second, independent way — matched exactly.
+
 ## 2026-08-23, later still one more time (walked the whole page, found the same story four times over)
 
 Kept following the same trail onto a different page — the one that shows who can see what, at what level, and under what size limit. Circled a piece of it, asked whether it was real.

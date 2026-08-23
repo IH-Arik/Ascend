@@ -15,6 +15,7 @@ from typing import Any
 
 from app.models.audit_log import AuditLog
 from app.models.medical_record import MedicalRecordAccessEvent
+from app.models.pending_confirmation import PendingConfirmation
 from app.models.report_export import ReportExport
 
 # Real, confirmed retention policy (docs/AUDIT_LOG_RULES.md) - exposed as
@@ -185,7 +186,20 @@ class AuditLogService:
         }
 
     async def get_stats(self) -> dict[str, Any]:
-        """Real 24h/7d totals + destructive-action/record-access snapshot for the Overview stat cards."""
+        """Real 24h/7d totals + destructive-action/record-access snapshot for the Overview stat cards.
+
+        `destructive_action_total_count`/`_pending_review_count` were
+        promised by this docstring but never actually implemented until
+        2026-08-23 (caught re-checking the Audit log screen's "Destructive
+        actions" card against this method - the docstring already said
+        "destructive-action... snapshot", the return dict never had one).
+        Sourced from `PendingConfirmation`, whose own module docstring
+        literally calls it "confirmation queue for destructive admin
+        actions" - every action type it tracks (`role_change`,
+        `deactivation`, `export`, `idmt_handoff`) counts, not just a
+        narrowed subset, since the model's own stated purpose already
+        settles the definition.
+        """
         now = datetime.now(timezone.utc)
         last_24h = now - timedelta(hours=24)
         last_7d = now - timedelta(days=7)
@@ -203,10 +217,16 @@ class AuditLogService:
         ).to_list()
         record_access_count = len(medical_events_24h)
 
+        confirmations = await PendingConfirmation.find().to_list()
+        destructive_action_total_count = len(confirmations)
+        destructive_action_pending_review_count = sum(1 for c in confirmations if c.status == "pending")
+
         return {
             "count_24h": count_24h,
             "count_7d": count_7d,
             "percent_vs_7d_avg": percent_vs_7d_avg,
             "record_access_count_24h": record_access_count,
+            "destructive_action_total_count": destructive_action_total_count,
+            "destructive_action_pending_review_count": destructive_action_pending_review_count,
             "retention_years": AUDIT_LOG_RETENTION_YEARS,
         }
