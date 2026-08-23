@@ -124,6 +124,20 @@ class ResetPasswordRequest(BaseModel):
         return validate_password_strength(value)
 
 
+class ChangePasswordRequest(BaseModel):
+    """A signed-in user changes their own password, proving the current one."""
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        """Enforce password strength rules."""
+        return validate_password_strength(value)
+
+
 class UserResponse(BaseModel):
     """Serialized user payload returned to clients."""
 

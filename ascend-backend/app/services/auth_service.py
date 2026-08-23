@@ -27,6 +27,7 @@ from app.schemas.auth import (
     RefreshRequest,
     RegisterRequest,
     ResendVerificationCodeRequest,
+    ChangePasswordRequest,
     ResetPasswordRequest,
     UserResponse,
     VerifyEmailRequest,
@@ -290,6 +291,54 @@ class AuthService:
         user.updated_at = utc_now()
         await user.save()
         return {}
+
+    async def change_password(self, user: User, payload: ChangePasswordRequest) -> dict[str, Any]:
+        """A signed-in user changes their own password. Audit logged.
+
+        Not DOCX-sourced (the DOCX never mentions passwords at all), but a
+        real functional gap rather than a Figma-only one: the admin
+        password-reset email already tells the recipient to "sign in and
+        change it as soon as possible", and `POST /admin/users` hands a new
+        account an admin-chosen initial password - without this endpoint
+        neither instruction was actually possible to follow, leaving the
+        provisioning admin permanently in possession of the user's working
+        password.
+
+        Distinct from the existing `reset_password`, which proves identity
+        with an emailed code because the user is locked out; here the user
+        is already authenticated and proves intent with the current
+        password instead. Neither the old nor the new password is ever
+        written to the audit log.
+        """
+        if payload.new_password != payload.confirm_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Passwords do not match.",
+            )
+        if not verify_password(payload.current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect.",
+            )
+        if verify_password(payload.new_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be different from the current password.",
+            )
+
+        user.hashed_password = get_password_hash(payload.new_password)
+        user.updated_at = utc_now()
+        await user.save()
+
+        await self.audit_log_service.record(
+            event_type="password_changed",
+            actor_id=user.id,
+            actor_role=user.role,
+            target_entity_type="user",
+            target_entity_id=str(user.id),
+            summary_message="User changed their own password.",
+        )
+        return {"changed": True}
 
     async def get_me(self, user: User) -> dict[str, Any]:
         """Return the current authenticated user payload."""

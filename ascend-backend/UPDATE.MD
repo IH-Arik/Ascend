@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-23, later (finishing the sentence the last feature started)
+
+Same day, same dashboard, one screen over: the profile page has a "Change password" box. That didn't work either — and this one is a slightly more interesting story than the last, because the requirements document never mentions passwords at all. Not once. So there was no requirement to point at.
+
+Built it anyway, on the strength of two things this system was *already* doing that quietly assumed it existed. First: when an admin resets someone's password, the email they get says "sign in and change it as soon as possible" — advice that was, until today, impossible to follow. Second: the "add a person" feature finished earlier this morning hands a brand-new user a password chosen by the admin. With no way to change it, that admin would keep a working key to that person's account indefinitely. Neither of those is acceptable, and neither needed a requirements doc to justify fixing.
+
+Worth being clear about what makes this different from the password-recovery flow that already existed: recovery is for someone locked out, so they prove who they are with a code sent to their email. This is for someone already signed in, so they prove intent by typing the password they currently have. Different problem, different proof, both needed.
+
+Tested it as an actual sequence rather than as an isolated endpoint, because the point of the feature is the handoff: an admin created a real account, the new person signed in with the admin's starter password, changed it to their own, and then the old admin-issued password stopped working while the new one worked. That last step is the whole reason this matters. Also confirmed the obvious refusals — wrong current password, mistyped confirmation, trying to "change" it to the same password, a too-weak new one, and an unauthenticated attempt — and confirmed the audit trail records that a password changed without recording either password.
+
 ## 2026-08-23 (the one thing nobody could actually do: add a person)
 
 Someone pointed at a screen in the admin dashboard — the little "Add person" window where you type a name, an email, pick a role, and get handed a starter password to pass along — and asked whether it actually worked behind the scenes. It didn't. Anyone could already be *edited* once they existed: change their role, move them to a unit, deactivate them, reset their password. But there was no way to create somebody in the first place. The only path into the system at all was people signing themselves up.
