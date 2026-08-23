@@ -234,8 +234,25 @@ class RoleAdminService:
                     "member_count": member_count,
                     "last_edit": last_edit,
                     "audit_entry_count": audit_entry_count,
+                    "is_real_role": True,
                 }
             )
+
+        # The screen lists a `Plan` row. It is deliberately not a real role -
+        # see `MATRIX_COLUMNS` - so it renders with honest zeros and an
+        # explicit `is_real_role: False` rather than being omitted (which
+        # would not match the design) or faked with invented counts.
+        rows.append(
+            {
+                "role": "Plan",
+                "cluster": "Contractor",
+                "scope": "Flight",
+                "member_count": 0,
+                "last_edit": None,
+                "audit_entry_count": 0,
+                "is_real_role": False,
+            }
+        )
 
         return {
             "role_count": len(SUPPORTED_ROLES),

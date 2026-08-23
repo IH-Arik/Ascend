@@ -114,30 +114,42 @@ ROLE_PERMISSIONS: Final[dict[str, list[str]]] = {
 # Not DOCX-sourced - a "Roles & RBAC" admin screen (Figma) groups roles into
 # clusters and color-codes them by scope. Roles were flat strings before
 # this; this is our own reasonable classification, not a DOCX requirement.
+# Display-only metadata for the Roles & RBAC "Role catalog" table - never
+# consulted for an access decision (only `RoleAdminService.get_catalog`
+# reads these). Originally an invented classification (Mobile/Staff/
+# Aggregate/Control/Secure) that guessed at the screen's vocabulary before
+# the design was available; corrected 2026-08-23 to the taxonomy the screen
+# actually uses, which its own CATEGORY filter buttons enumerate:
+# ALL / STAFF / CONTRACTOR / OFFICER / SYSTEM.
 ROLE_CLUSTER: Final[dict[str, str]] = {
-    ROLE_AIRMAN: "Mobile",
+    ROLE_AIRMAN: "Staff",
     ROLE_SCS: "Staff",
     ROLE_PTIM: "Staff",
     ROLE_NUTRITIONIST: "Staff",
     ROLE_MENTAL_PERFORMANCE: "Staff",
     ROLE_CHAPLAIN: "Staff",
-    ROLE_LEADERSHIP: "Aggregate",
-    ROLE_ADMIN: "Control",
-    ROLE_SUPERADMIN: "Control",
-    ROLE_IDMT: "Secure",
+    ROLE_LEADERSHIP: "Contractor",
+    ROLE_ADMIN: "Officer",
+    # Not shown as its own row on the screen (ADMIN covers both admin-level
+    # roles there), so it follows Admin's classification.
+    ROLE_SUPERADMIN: "Officer",
+    ROLE_IDMT: "System",
 }
 
+# Display-only, same as `ROLE_CLUSTER` above - the real access scoping lives
+# in `RoleScopeConfig` (cohort_k / visible_components) and each route's own
+# `require_roles(...)`, not here. Values match the screen's SCOPE column.
 ROLE_SCOPE: Final[dict[str, str]] = {
-    ROLE_AIRMAN: "Self",
+    ROLE_AIRMAN: "Own",
     ROLE_SCS: "Flight",
     ROLE_PTIM: "Caseload",
     ROLE_NUTRITIONIST: "Caseload",
-    ROLE_MENTAL_PERFORMANCE: "Opt-in",
-    ROLE_CHAPLAIN: "Opt-in",
-    ROLE_LEADERSHIP: "Wing (k>=5)",
+    ROLE_MENTAL_PERFORMANCE: "Caseload",
+    ROLE_CHAPLAIN: "Caseload",
+    ROLE_LEADERSHIP: "Global",
     ROLE_ADMIN: "Global",
     ROLE_SUPERADMIN: "Global",
-    ROLE_IDMT: "Handoff",
+    ROLE_IDMT: "Caseload",
 }
 
 
