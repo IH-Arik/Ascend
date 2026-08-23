@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-23, later still once more (two real numbers, and three honest refusals)
+
+A whole status page this time, asked all at once — an uptime figure, a services table, session counts, a compliance badge, a backup timestamp, a rate table. Eight small numbers and two tables.
+
+Different from most of today, though: two pieces of real machinery already existed on this exact page, built specifically to replace fake versions of it, sitting there unused by the screen itself. Checked every single value against them one at a time. Some lined up exactly — a cohort-size limit and a grace period both matched the real configured values precisely. One turned out to be simply the wrong number where a real one already existed, corrected earlier today. Another claimed a specific hour window that's real but stated backwards — the actual number is six times larger. One had no real counterpart at all — a percentage threshold where the real system only ever produces a plain word, never a number.
+
+Asked to build what was still missing, and went through each one honestly rather than filling every blank. Two turned out to have a real, defensible answer sitting in already-tracked data: how many people have used the system in the last little while, and how many completed clinical handoffs are sitting fully approved but not yet actually sent. Built both — labeled the first one plainly for what it actually is, since this system doesn't keep a real record of active connections, only of when someone last signed in, which is a reasonable stand-in but not the same thing.
+
+Three others got refused outright, on purpose. A percentage uptime figure, a backup timestamp, a days-since-last-incident badge — none of these have anything real behind them anywhere in this system. No process measures uptime. No backup job exists to report on. No incident-day counter runs anywhere. Inventing plausible numbers for any of them would have been exactly the mistake caught and fixed a dozen times already today, just wearing a new outfit. Left them alone, and said so directly rather than quietly filling the gaps with something that merely looked complete.
+
 ## 2026-08-23, later still yet once more again, more still (the one that turned out to be exactly right, and pointed at the biggest gap of the day)
 
 One more heading on the same page: a small table titled with a number — nine of something required. Asked whether it was real before touching anything, the way today had already gone wrong once by assuming too fast.

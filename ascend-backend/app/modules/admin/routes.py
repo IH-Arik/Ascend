@@ -3,7 +3,7 @@
 from typing import Any
 
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
@@ -27,6 +27,7 @@ from app.core.security import decode_token
 from app.models.audit_log import AuditLog
 from app.models.report_export import ReportExport
 from app.models.scheduler_job_run import SchedulerJobRun
+from app.models.idmt_handoff import IdmtHandoff
 from app.models.user import User
 from app.schemas.admin_confirmation import ConfirmationRejectRequest
 from app.schemas.admin_user import (
@@ -424,12 +425,29 @@ async def get_system_diagnostics(
     )
 
 
+ACTIVE_SESSION_WINDOW_MINUTES = 30
+
+
 @router.get("/system/overview", summary="System screen overview - real uptime/thresholds/queues, no fabricated panels")
 async def get_system_overview(
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
 ):
     """Composes real data already tracked. See app/core/scheduler.py for the tiered threshold
     constants and app/services/coverage_service.py for the real RSD aggregate.
+
+    `active_sessions`/`pending_transmission_count` added 2026-08-23 closing
+    2 of the System screen's real gaps (found alongside 3 that stay
+    genuinely unbacked - 24h uptime %, a backup system, and a "Compliance
+    - 55d" day-count - none of which this backend tracks anywhere, and
+    none built here rather than invented). `active_sessions` is not a
+    real session store (this app is stateless-JWT, no server-side session
+    table) - it is a real, explicitly-labeled proxy: users whose real
+    `last_login_at` falls within the last `ACTIVE_SESSION_WINDOW_MINUTES`,
+    our own reasonable inference for "active" since no design or DOCX
+    source defines the term. `pending_transmission_count` is real -
+    `IdmtHandoff` records already track a real `approved -> transmitted`
+    state transition (DOCX Section 8.5), so "approved but not yet
+    transmitted" is a real, not inferred, count.
     """
     system_health = await provider_dashboard_service.get_system_health()
     question_registry = build_question_registry()
@@ -444,6 +462,14 @@ async def get_system_overview(
 
     rsd_coverage = await coverage_service.get_rsd_summary(datetime.now(timezone.utc).year)
 
+    session_cutoff = datetime.now(timezone.utc) - timedelta(minutes=ACTIVE_SESSION_WINDOW_MINUTES)
+    recently_active = await User.find(User.last_login_at >= session_cutoff).to_list()
+    staff_count = sum(1 for u in recently_active if u.role not in ADMIN_ROLES and u.role != ROLE_IDMT)
+    admin_count = sum(1 for u in recently_active if u.role in ADMIN_ROLES)
+    imt_count = sum(1 for u in recently_active if u.role == ROLE_IDMT)
+
+    pending_transmission_count = await IdmtHandoff.find(IdmtHandoff.status == "approved").count()
+
     return success_response(
         "System overview loaded successfully.",
         {
@@ -456,6 +482,12 @@ async def get_system_overview(
                 "l4_drop_points": L4_DROP_POINTS,
                 "export_approval_window_hours": EXPORT_APPROVAL_WINDOW_HOURS,
                 "deactivation_grace_days": INACTIVITY_GRACE_DAYS,
+                "confidence_rule": (
+                    "high: 5/5 real components valid + 0 stale; "
+                    "medium: 3+/5 valid + <=1 stale; low: otherwise "
+                    "(app/core/scoring.py calculate_confidence - categorical, "
+                    "not a numeric percentage)."
+                ),
             },
             "reverse_scoring_status": (
                 "No weekly/monthly question requires reverse-scoring - every question's "
@@ -470,6 +502,14 @@ async def get_system_overview(
             "inactive_accounts_count": len(inactive_accounts),
             "rsd_coverage": rsd_coverage,
             "privacy_cohort_suppression": {"leadership_k": leadership_scope["cohort_k"]},
+            "active_sessions": {
+                "window_minutes": ACTIVE_SESSION_WINDOW_MINUTES,
+                "total": len(recently_active),
+                "staff": staff_count,
+                "admin": admin_count,
+                "imt": imt_count,
+            },
+            "pending_transmission_count": pending_transmission_count,
         },
     )
 
