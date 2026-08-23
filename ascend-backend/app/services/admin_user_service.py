@@ -21,7 +21,7 @@ different Admin/Superadmin must then approve it before it takes effect.
 from __future__ import annotations
 
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -30,6 +30,7 @@ from app.core.roles import ADMIN_ROLES, ROLE_SUPERADMIN, SUPPORTED_ROLES, normal
 from app.core.security import get_password_hash, utc_now
 from app.core.support_pathways import get_support_pathway
 from app.services.auth_service import ACCESS_EXPIRY_DAYS
+from app.models.audit_log import AuditLog
 from app.models.team_assignment import TeamAssignment
 from app.models.user import User
 from app.schemas.admin_user import (
@@ -50,6 +51,20 @@ STATUS_LOCKED_ON = "locked_on"
 # column says accounts, not pending deactivations).
 INACTIVITY_GRACE_DAYS = 14
 
+# The audit event types that represent a real change to an account, backing
+# the Roles & RBAC "Last edit" column. Deliberately excludes `login_success`
+# and `login_failed` - those target a user but are activity, not an edit.
+ACCOUNT_EDIT_EVENT_TYPES: tuple[str, ...] = (
+    "user_provisioned",
+    "role_changed",
+    "role_change_requested",
+    "unit_assigned",
+    "access_renewed",
+    "admin_password_reset",
+    "password_changed",
+    "admin_deactivation_requested",
+)
+
 
 class AdminUserService:
     """List users and manage role/unit/provider assignments."""
@@ -60,13 +75,49 @@ class AdminUserService:
         self.email_service = EmailService()
 
     async def list_users(self, role_filter: str | None = None) -> dict[str, Any]:
-        """Return every user, optionally filtered by role."""
+        """Return every user, optionally filtered by role, with a real last-edit timestamp."""
         if role_filter:
             users = await User.find(User.role == normalize_role(role_filter)).to_list()
         else:
             users = await User.find().to_list()
         users.sort(key=lambda item: item.email)
-        return {"users": [self._serialize(u) for u in users]}
+        last_edits = await self._get_last_edit_map()
+        return {
+            "users": [
+                {**self._serialize(u), "last_edit_at": last_edits.get(str(u.id))} for u in users
+            ]
+        }
+
+    async def _get_last_edit_map(self) -> dict[str, str]:
+        """Return `{user_id: ISO timestamp}` of each account's most recent real edit.
+
+        Deliberately derived from the audit log rather than `User.updated_at`.
+        `updated_at` is bumped by *any* save of the document - including an
+        ordinary login (`AuthService.login_user`), a daily check-in, and
+        onboarding progress - so an admin-facing "Last edit" column built on
+        it would move every time the person merely used the app, which is not
+        what that column means. The audit log records exactly the account
+        mutations (see `ACCOUNT_EDIT_EVENT_TYPES`), which is the real answer,
+        and matches the Roles & RBAC screen's own stated policy that every
+        modification writes to the control-plane log.
+
+        One grouped query rather than one per user - `AuditLog` already has an
+        index on `(target_entity_type, target_entity_id)`. Dict-style query
+        because this codebase's Beanie version can't combine `(A) & (B)`
+        conditions (documented in `docs/E2E_TEST_STATUS.md`).
+        """
+        entries = await AuditLog.find(
+            {
+                "target_entity_type": "user",
+                "event_type": {"$in": list(ACCOUNT_EDIT_EVENT_TYPES)},
+            }
+        ).to_list()
+        latest: dict[str, datetime] = {}
+        for entry in entries:
+            current = latest.get(entry.target_entity_id)
+            if current is None or entry.created_at > current:
+                latest[entry.target_entity_id] = entry.created_at
+        return {user_id: stamp.isoformat() for user_id, stamp in latest.items()}
 
     async def list_inactive_accounts(self, grace_days: int = INACTIVITY_GRACE_DAYS) -> list[dict[str, Any]]:
         """Return real active accounts that have gone quiet for at least `grace_days`.
@@ -345,4 +396,9 @@ class AdminUserService:
             "is_active": user.is_active,
             "is_verified": user.is_verified,
             "access_expires_at": user.access_expires_at.isoformat() if user.access_expires_at else None,
+            # A real fallback for the "Last edit" column on an account that
+            # has genuinely never been edited (self-registered, never touched
+            # by an admin) - `last_edit_at` is null there rather than being
+            # backfilled with something invented.
+            "created_at": user.created_at.isoformat(),
         }

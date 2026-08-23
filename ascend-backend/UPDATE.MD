@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-08-23, later still (a one-line fix that would have been wrong)
+
+Third gap on the same dashboard today: the people table has a "Last edit" column, and nothing was filling it. Every other column in that table — name, email, role, unit, status — already had real data behind it. That one didn't.
+
+There was an obvious quick fix sitting right there. Every account record already carries a "last updated" timestamp, so returning it would have been a single line. But checking what actually writes to that field showed it moves whenever the record is saved *for any reason at all* — including someone simply logging in, or filling out their daily check-in. A column labelled "last edit", on a screen an admin uses to manage roles and permissions, that quietly changes every time the person opens the app, is worse than an empty column. It looks like information and isn't.
+
+So it's built from the audit trail instead — the log that already records exactly the things that count as editing an account: someone's role changed, their unit reassigned, access renewed, password reset, account created or deactivation requested. Logging in is recorded there too, but it's deliberately excluded, because signing in isn't an edit. This also happens to be what the screen's own policy banner already promises: every change writes to that log.
+
+For accounts nobody has ever touched, the answer is honestly nothing rather than a made-up date — so the column comes back empty, with the account's real creation date supplied alongside if the interface would rather show that.
+
+Worth recording the testing misstep, since it nearly passed: the first check picked an account that had never been edited, logged in as them, and confirmed the timestamp "didn't change" — which proved absolutely nothing, since it was empty to begin with and stayed empty. Redone against an account carrying a real timestamp: three logins in a row left it untouched, then one genuine edit moved it. That's the test that actually demonstrates the distinction the whole decision rests on.
+
 ## 2026-08-23, later (finishing the sentence the last feature started)
 
 Same day, same dashboard, one screen over: the profile page has a "Change password" box. That didn't work either — and this one is a slightly more interesting story than the last, because the requirements document never mentions passwords at all. Not once. So there was no requirement to point at.
