@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-23, later still once more (the one column that really was empty)
+
+Followed the same table one step further. Circled two columns and asked directly whether they were missing. One of them, it turned out, already had a real answer as of the last fix — it just hadn't been wired up on the screen yet. The other one genuinely had nothing behind it anywhere, on either side.
+
+Went looking at the actual screen's source code to be sure, and found the whole table is just a list of numbers typed directly into the page — not fetched from anywhere. It even invents a few categories that don't correspond to anything real in the system at all, and marks one question as scored in a special reverse way that, checked directly against the code that actually does the scoring, it isn't. That's a frontend problem, not something for this backend to fix, and matches a boundary already agreed on earlier this project: wiring the two together is someone else's part of the work.
+
+But one of the two circled columns pointed at something real underneath the fake table — a whole feature, described in the requirements document, that had simply never been built: a record of which version of the question set is currently approved, who approved it, when it took effect, and when (if ever) it was retired. Asked directly whether to build that piece for real, and the answer was yes.
+
+Built it as its own small, versioned record — the same pattern already used elsewhere for scoring configuration, plus a genuine "retired" state that one doesn't have. Creating a new version doesn't erase the old one; retiring is its own separate, explicit step, which matches the requirement's own reasoning: never break the history of what a past score meant. Tested the whole shape of it end to end — nothing active, then something active, then that same thing showing up automatically where the registry reports it, then retired, then correctly refusing to retire it twice, then back to nothing active. Every step checked against the real database, not assumed.
+
 ## 2026-08-23, later still yet again (asked "shouldn't this be backend?" and it turned out I owed an apology)
 
 Got shown a live screenshot of a table on the same dashboard — a question registry, 46 rows, split into four groups labeled O, D, W, and M. Asked directly whether it was real, or made up on the frontend like a few other things had turned out to be earlier today.

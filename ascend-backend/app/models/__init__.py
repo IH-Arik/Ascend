@@ -34,6 +34,7 @@ from app.models.scheduled_export import ScheduledExport
 from app.models.scheduler_job_run import SchedulerJobRun
 from app.models.scoring_config import ScoringConfig
 from app.models.performance_summary import PerformanceSummary
+from app.models.question_bank_version import QuestionBankVersion
 from app.models.specialist_note import SpecialistNote
 from app.models.support_request import SupportRequest
 from app.models.team_assignment import TeamAssignment
@@ -77,6 +78,7 @@ __all__ = [
     "SchedulerJobRun",
     "ScoringConfig",
     "PerformanceSummary",
+    "QuestionBankVersion",
     "SpecialistNote",
     "SupportRequest",
     "TeamAssignment",

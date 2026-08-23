@@ -42,6 +42,7 @@ from app.schemas.equipment_gap import EquipmentGapCreate, EquipmentGapUpdate
 from app.schemas.idmt_handoff import IdmtHandoffCreateRequest
 from app.schemas.org_unit import OrgUnitCreate
 from app.schemas.provider_credential import CredentialCreate
+from app.schemas.question_bank_version import QuestionBankVersionCreate
 from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportStatusUpdate
 from app.schemas.recommendation_threshold_config import RecommendationThresholdConfigCreate
 from app.schemas.report_export import ReportLifecycleUpdate
@@ -60,6 +61,7 @@ from app.services.leadership_aggregate_service import LeadershipAggregateService
 from app.services.oft_service import OFTService
 from app.services.org_unit_service import OrgUnitService
 from app.services.provider_dashboard_service import ProviderDashboardService
+from app.services.question_bank_version_service import QuestionBankVersionService
 from app.services.role_admin_service import RoleAdminService
 from app.services.recommendation_threshold_config_service import (
     RecommendationThresholdConfigService,
@@ -90,6 +92,7 @@ equipment_gap_service = EquipmentGapService()
 utilization_service = UtilizationService()
 coverage_service = CoverageService()
 scoring_config_service = ScoringConfigService()
+question_bank_version_service = QuestionBankVersionService()
 recommendation_threshold_config_service = RecommendationThresholdConfigService()
 reports_service = ReportsService()
 report_export_service = ReportExportService()
@@ -455,12 +458,53 @@ async def get_system_overview(
     )
 
 
-@router.get("/question-registry", summary="Contract Question Registry - real 40-question view")
+@router.get("/question-registry", summary="Contract Question Registry - real 46-question view")
 async def get_question_registry(
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
 ):
-    """Simplified, real registry over the 3 existing question banks (not DOCX-sourced, see `app/core/question_registry.py`)."""
-    return success_response("Question registry loaded successfully.", build_question_registry())
+    """Simplified, real registry over the 4 existing question banks (not DOCX-sourced, see `app/core/question_registry.py`).
+
+    `current_version` is the real active `QuestionBankVersion`, if an Admin has recorded one (`POST /admin/question-bank-versions`) - `None` otherwise, never fabricated.
+    """
+    data = build_question_registry()
+    data["current_version"] = await question_bank_version_service.get_active_version_summary()
+    return success_response("Question registry loaded successfully.", data)
+
+
+# --- Question Bank Version (DOCX Table 22: version_id, effective_date, retired_date, approved_by, ...) ---
+
+
+@router.post(
+    "/question-bank-versions",
+    status_code=status.HTTP_201_CREATED,
+    summary="Record a new approved question bank version",
+)
+async def create_question_bank_version(
+    payload: QuestionBankVersionCreate,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    """Admin/Superadmin approves and records a new question bank version."""
+    data = await question_bank_version_service.create_version(current_user, payload)
+    return success_response("Question bank version recorded successfully.", data)
+
+
+@router.get("/question-bank-versions", summary="List question bank version history")
+async def list_question_bank_versions(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    """Return every recorded question bank version, newest first."""
+    data = await question_bank_version_service.list_versions()
+    return success_response("Question bank versions loaded successfully.", data)
+
+
+@router.post("/question-bank-versions/{version_id}/retire", summary="Retire a question bank version")
+async def retire_question_bank_version(
+    version_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    """Admin/Superadmin retires a version as of today."""
+    data = await question_bank_version_service.retire_version(current_user, version_id)
+    return success_response("Question bank version retired successfully.", data)
 
 
 @router.get("/confirmations", summary="List second-reviewer confirmations")
