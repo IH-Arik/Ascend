@@ -35,6 +35,10 @@ REPORT_ROW_KEYS = {
     "wing_weekly_ops": None,
     "monthly_cohort_review": None,
     "annual_wing_readiness": None,
+    "leadership_aggregate_readiness": None,
+    "idmt_handoff_summary": "handoffs",
+    "medical_records_audit": None,
+    "performance_summary_export": "summaries",
 }
 
 # Not DOCX-sourced (see `app/models/pending_confirmation.py`) - "restricted"
@@ -55,6 +59,13 @@ REPORT_SENSITIVITY = {
     "wing_weekly_ops": "aggregate",
     "monthly_cohort_review": "aggregate",
     "annual_wing_readiness": "aggregate",
+    "leadership_aggregate_readiness": "aggregate",
+    # All 3 restricted - each carries per-Airman identifiable data (a real
+    # recipient/prepared-by/reviewer role plus a specific operator's
+    # record), same reasoning as "injury" above.
+    "idmt_handoff_summary": "restricted",
+    "medical_records_audit": "restricted",
+    "performance_summary_export": "restricted",
 }
 
 # Real, minimal template registry (2026-08-10, Leadership "Reports" pass) -

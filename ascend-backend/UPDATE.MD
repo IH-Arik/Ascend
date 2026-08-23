@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-08-23, later still yet once more again, more still (the one that turned out to be exactly right, and pointed at the biggest gap of the day)
+
+One more heading on the same page: a small table titled with a number — nine of something required. Asked whether it was real before touching anything, the way today had already gone wrong once by assuming too fast.
+
+This time the number was exactly, precisely correct. The actual requirements document has a table naming exactly nine specific reports this whole system is contractually required to produce, word for word matching what the screen's title claimed. That part wasn't invented at all — it was the most literal, verbatim-accurate thing found on this page all day.
+
+But checking what the backend already builds against that same list of nine turned up a real mismatch, not a display problem this time. Five of the nine lined up cleanly. The other four didn't: three of the required nine had never been implemented at all — the underlying pieces of data for them already existed elsewhere in the system, built for other reasons over the past several days, just never assembled into the specific report the requirements document actually asks for. And the fourth slot was filled by three different homemade variants of a similar idea, none of them actually matching what was required — more effort than the requirement needed, spent in a direction that missed it.
+
+Asked whether to just note that and move on, or actually go build the three missing ones and fix the fourth. Chose to build it properly. Wrote the real requirements list into the codebase directly from the source document, word for word — what each report must contain, who it goes to — so it can't quietly drift out of sync with a paraphrase later. Built the three genuinely missing reports from data that already existed, being explicit anywhere the requirement asks for something this system doesn't actually track, rather than filling that gap with something that only looks complete. Replaced the three mismatched variants with one real report that actually assembles what the requirement calls for. Added a way to see, honestly, whether each of the nine has ever actually been produced and when — nothing invented for the ones that haven't been.
+
+Verified by actually running all four newly built reports for real, not just reading the code and assuming — watched the ordinary ones come back immediately and the sensitive ones correctly land in the same approval queue everything sensitive already goes through, then confirmed the tracking list updated to reflect exactly what had just happened. Opened one of the new reports' actual output and read real numbers in it, not sample text.
+
 ## 2026-08-23, later still yet once more again, more (a button that only ever did half of what it says)
 
 Same page, one more piece — a table of recurring exports, each with an "Edit" link. Clicking it opens the exact same form used to create one in the first place, filled in with the existing values.

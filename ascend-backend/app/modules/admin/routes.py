@@ -112,6 +112,10 @@ REPORT_BUILDERS = {
     "wing_weekly_ops": lambda: leadership_aggregate_service.get_wing_weekly_report(),
     "monthly_cohort_review": lambda: leadership_aggregate_service.get_monthly_cohort_report(),
     "annual_wing_readiness": lambda: leadership_aggregate_service.get_annual_wing_report(),
+    "leadership_aggregate_readiness": lambda: reports_service.get_leadership_aggregate_readiness_report(),
+    "idmt_handoff_summary": lambda: reports_service.get_idmt_handoff_summary_report(),
+    "medical_records_audit": lambda: reports_service.get_medical_records_audit_report(),
+    "performance_summary_export": lambda: reports_service.get_performance_summary_export_report(),
 }
 
 
@@ -364,6 +368,18 @@ async def get_exports_overview(
             "available_reports": available_reports,
         },
     )
+
+
+@router.get(
+    "/reports/required-contract-reports",
+    summary="The real 9 required contract reports (DOCX Table 26) + real generation status",
+)
+async def get_required_contract_reports(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    """Backs the Exports 'X required contract reports' panel with DOCX-verbatim names/sections/users."""
+    data = await reports_service.get_required_contract_reports_status()
+    return success_response("Required contract reports loaded successfully.", data)
 
 
 @router.get("/system/diagnostics", summary="Real system diagnostics - DB ping, scheduler job health, AI config")

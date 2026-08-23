@@ -13,12 +13,19 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
+from app.core.contract_reports import REQUIRED_CONTRACT_REPORTS
 from app.core.roles import ROLE_PTIM, ROLE_SCS
 from app.models.assessment import Assessment
+from app.models.equipment_gap import EquipmentGap
+from app.models.idmt_handoff import IdmtHandoff
+from app.models.medical_record import MedicalRecord, MedicalRecordAccessEvent
+from app.models.performance_summary import PerformanceSummary
 from app.models.reconditioning_plan import ReconditioningPlan
+from app.models.report_export import ReportExport
 from app.models.user import User
 from app.models.workout_log import WorkoutLog
 from app.services.coverage_service import CoverageService
+from app.services.leadership_aggregate_service import LeadershipAggregateService
 from app.services.utilization_service import UtilizationService
 
 PRS_TARGET_HOURS = {ROLE_SCS: 2080.0, ROLE_PTIM: 512.0}
@@ -31,6 +38,37 @@ class ReportsService:
     def __init__(self) -> None:
         self.coverage_service = CoverageService()
         self.utilization_service = UtilizationService()
+        self.leadership_aggregate_service = LeadershipAggregateService()
+
+    async def get_required_contract_reports_status(self) -> dict[str, Any]:
+        """The real 9 required contract reports (DOCX Table 26) + each one's real generation history.
+
+        `last_generated_at`/`last_export_id` come from the most recent real
+        `ReportExport` row for that `report_type` - `None` if it has never
+        actually been generated. No due date, no named approver, no "CUI"
+        label - see `app/core/contract_reports.py` for why those aren't
+        reproduced here.
+        """
+        rows = []
+        for entry in REQUIRED_CONTRACT_REPORTS:
+            exports = await ReportExport.find(
+                ReportExport.report_type == entry["report_type"]
+            ).to_list()
+            latest = max(exports, key=lambda e: e.created_at) if exports else None
+            rows.append(
+                {
+                    **entry,
+                    "last_generated_at": latest.created_at.isoformat() if latest else None,
+                    "last_export_id": str(latest.id) if latest else None,
+                    "last_export_status": latest.export_log_status if latest else None,
+                    "ever_generated": latest is not None,
+                }
+            )
+        return {
+            "required_count": len(REQUIRED_CONTRACT_REPORTS),
+            "generated_at_least_once_count": sum(1 for r in rows if r["ever_generated"]),
+            "reports": rows,
+        }
 
     async def get_injury_report(self, days: int = 90) -> dict[str, Any]:
         """Injury/Recovery Report: real reconditioning plans + limitation-flagged workouts.
@@ -218,4 +256,168 @@ class ReportsService:
             "providers": provider_rows,
             "assessment_compliance": assessment_compliance,
             "rsd_coverage": rsd_coverage,
+        }
+
+    async def get_leadership_aggregate_readiness_report(self) -> dict[str, Any]:
+        """Leadership Aggregate Readiness Report (DOCX Table 26, report #6).
+
+        Required Sections per DOCX: "Aggregate OPS, readiness component
+        trends, HPO/H2F component trends, support category usage,
+        reconditioning status, utilization summary, equipment gaps,
+        recommendations." A real composite, not the pre-existing
+        `wing_weekly_ops`/`monthly_cohort_review`/`annual_wing_readiness`
+        (all 3 explicitly "not DOCX-sourced", each narrower than this list)
+        - built 2026-08-23 while realigning the report catalog against
+        DOCX's actual 9-report list. "Recommendations" is omitted: no real
+        aggregate/org-wide recommendation-summary data source exists in
+        this backend (`Recommendation` is per-operator, not aggregable
+        into a leadership-facing summary anywhere else either).
+        """
+        ops_trend = await self.leadership_aggregate_service.get_period_trend("30d")
+
+        plans = await ReconditioningPlan.find().to_list()
+        by_phase: dict[str, int] = {}
+        for plan in plans:
+            by_phase[plan.phase] = by_phase.get(plan.phase, 0) + 1
+
+        utilization = await self.get_utilization_report()
+
+        open_gaps = await EquipmentGap.find(EquipmentGap.status == "open").to_list()
+        by_priority: dict[str, int] = {}
+        for gap in open_gaps:
+            by_priority[gap.priority] = by_priority.get(gap.priority, 0) + 1
+
+        return {
+            "ops_trend": ops_trend,
+            "reconditioning_status": {"active_count": len(plans), "by_phase": by_phase},
+            "utilization_summary": {
+                "total_events": utilization["total_events"],
+                "actual_use_count": utilization["actual_use_count"],
+            },
+            "equipment_gaps": {"open_count": len(open_gaps), "by_priority": by_priority},
+        }
+
+    async def get_idmt_handoff_summary_report(self, days: int = 90) -> dict[str, Any]:
+        """IDMT Documentation Handoff Summary (DOCX Table 26, report #7).
+
+        Required Sections per DOCX: "Operator identifier as approved; export
+        type; prepared by; recipient role; date prepared/transmitted;
+        acknowledgement status; content category." All real `IdmtHandoff`
+        fields - never the underlying record content (this model never
+        stores raw medical-record bytes, see `app/models/idmt_handoff.py`).
+        """
+        cutoff = date.today() - timedelta(days=days)
+        handoffs = await IdmtHandoff.find(IdmtHandoff.created_at >= cutoff).to_list()
+
+        rows = []
+        by_status: dict[str, int] = {}
+        for handoff in handoffs:
+            user = await User.get(handoff.user_id)
+            preparer = await User.get(handoff.prepared_by)
+            by_status[handoff.status] = by_status.get(handoff.status, 0) + 1
+            rows.append(
+                {
+                    "user_id": str(handoff.user_id),
+                    "user_name": user.full_name if user else None,
+                    "export_type": handoff.export_type,
+                    "content_category": handoff.content_category,
+                    "prepared_by_role": preparer.role if preparer else None,
+                    "recipient_role": handoff.recipient_role,
+                    "status": handoff.status,
+                    "prepared_date": handoff.prepared_date.isoformat(),
+                    "transmitted_date": handoff.transmitted_date.isoformat() if handoff.transmitted_date else None,
+                    "acknowledgement_status": handoff.acknowledgement_status,
+                }
+            )
+        return {
+            "window_days": days,
+            "handoff_count": len(rows),
+            "by_status": by_status,
+            "handoffs": rows,
+        }
+
+    async def get_medical_records_audit_report(self, days: int = 90) -> dict[str, Any]:
+        """Medical Records Upload and Access Audit Report (DOCX Table 26, report #8).
+
+        Required Sections per DOCX: "Date range; documents uploaded;
+        document types; review status; access events; exports/downloads;
+        recipient roles; unresolved review items; retention/disposition
+        status; anomalies or unauthorized-access flags." Everything here is
+        real except the last one - this backend tracks no anomaly/
+        unauthorized-access detection, so it is simply omitted rather than
+        fabricated, same "omit what isn't tracked" precedent as the other
+        reports in this file.
+        """
+        cutoff = date.today() - timedelta(days=days)
+        records = await MedicalRecord.find(MedicalRecord.uploaded_at >= cutoff).to_list()
+        record_ids = [r.id for r in records]
+        events = (
+            await MedicalRecordAccessEvent.find({"record_id": {"$in": record_ids}}).to_list()
+            if record_ids
+            else []
+        )
+
+        by_document_type: dict[str, int] = {}
+        by_review_status: dict[str, int] = {}
+        for record in records:
+            by_document_type[record.document_type] = by_document_type.get(record.document_type, 0) + 1
+            by_review_status[record.status] = by_review_status.get(record.status, 0) + 1
+
+        return {
+            "window_days": days,
+            "documents_uploaded": len(records),
+            "by_document_type": by_document_type,
+            "by_review_status": by_review_status,
+            "unresolved_review_count": by_review_status.get("pending", 0),
+            "access_event_count": len(events),
+            "view_count": sum(1 for e in events if e.action == "view_record"),
+            "download_count": sum(1 for e in events if e.action == "download"),
+            "recipient_roles": sorted({e.actor_role for e in events}),
+            "retention_expiring_30d_count": sum(
+                1
+                for r in records
+                if r.access_expires_at and 0 <= (r.access_expires_at.date() - date.today()).days <= 30
+            ),
+        }
+
+    async def get_performance_summary_export_report(self, days: int = 90) -> dict[str, Any]:
+        """Medical History Performance Summary Export (DOCX Table 26, report #9).
+
+        Required Sections per DOCX: "Minimum-necessary performance
+        implications from uploaded medical history; approved limitations;
+        return-to-performance considerations; reconditioning considerations;
+        specialist visibility level; reviewer name/role; review date." Row-
+        level content fields are deliberately omitted here (this is a
+        contract-compliance rollup, not a clinical viewer) - only the real
+        `approved_visibility_level` and metadata, matching the DOCX phrase
+        "minimum-necessary" that the field-scoping in
+        `PerformanceSummaryService` already enforces elsewhere.
+        """
+        cutoff = date.today() - timedelta(days=days)
+        summaries = await PerformanceSummary.find(PerformanceSummary.review_date >= cutoff).to_list()
+
+        by_visibility: dict[str, int] = {}
+        rows = []
+        for summary in summaries:
+            by_visibility[summary.approved_visibility_level] = (
+                by_visibility.get(summary.approved_visibility_level, 0) + 1
+            )
+            rows.append(
+                {
+                    "user_id": str(summary.user_id),
+                    "reviewer_role": summary.reviewer_role,
+                    "review_date": summary.review_date.isoformat(),
+                    "approved_visibility_level": summary.approved_visibility_level,
+                    "expiration_or_review_due_date": (
+                        summary.expiration_or_review_due_date.isoformat()
+                        if summary.expiration_or_review_due_date
+                        else None
+                    ),
+                }
+            )
+        return {
+            "window_days": days,
+            "summary_count": len(rows),
+            "by_visibility_level": by_visibility,
+            "summaries": rows,
         }

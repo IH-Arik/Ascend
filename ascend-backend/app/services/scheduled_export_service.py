@@ -39,6 +39,10 @@ REPORT_BUILDERS = {
     "wing_weekly_ops": lambda: leadership_aggregate_service.get_wing_weekly_report(),
     "monthly_cohort_review": lambda: leadership_aggregate_service.get_monthly_cohort_report(),
     "annual_wing_readiness": lambda: leadership_aggregate_service.get_annual_wing_report(),
+    "leadership_aggregate_readiness": lambda: reports_service.get_leadership_aggregate_readiness_report(),
+    "idmt_handoff_summary": lambda: reports_service.get_idmt_handoff_summary_report(),
+    "medical_records_audit": lambda: reports_service.get_medical_records_audit_report(),
+    "performance_summary_export": lambda: reports_service.get_performance_summary_export_report(),
 }
 
 
