@@ -199,6 +199,11 @@ class AdminUserService:
             target_entity_type="user",
             target_entity_id=str(user.id),
             summary_message=f"Admin provisioned a new {new_role} account for {user.email}.",
+            # `role` here is what makes this event countable as a real edit
+            # to that role's own history (see `RoleAdminService.get_catalog`'s
+            # `last_edit`) - a role granted at creation is just as real an
+            # edit to the role as one granted later via `change_role`.
+            metadata_payload={"role": new_role},
         )
         return {**self._serialize(user), "initial_password": initial_password}
 

@@ -213,18 +213,30 @@ class RoleAdminService:
 
     async def get_catalog(self) -> dict[str, Any]:
         """One row per real role: cluster/scope metadata + real member/audit counts."""
-        role_change_events = await AuditLog.find(AuditLog.event_type == "role_changed").to_list()
+        # Two real event types grant a role: `role_changed` (an existing
+        # account moved into it) and `user_provisioned` (a brand-new account
+        # created with it directly, via POST /admin/users). Missing the
+        # second meant a role's `last_edit` stayed frozen forever if every
+        # member of it had only ever been provisioned, never switched -
+        # caught live: provisioning a new IDMT account correctly moved
+        # member_count 3 -> 4 but silently left last_edit unchanged.
+        role_grant_events = await AuditLog.find(
+            {"event_type": {"$in": ["role_changed", "user_provisioned"]}}
+        ).to_list()
 
         rows = []
         for role in SUPPORTED_ROLES:
             member_count = await User.find(User.role == role).count()
             audit_entry_count = await AuditLog.find(AuditLog.actor_role == role).count()
 
-            matching_changes = [
-                e for e in role_change_events if e.metadata_payload.get("new_role") == role
+            matching_events = [
+                e
+                for e in role_grant_events
+                if e.metadata_payload.get("new_role") == role
+                or e.metadata_payload.get("role") == role
             ]
-            matching_changes.sort(key=lambda e: e.created_at, reverse=True)
-            last_edit = matching_changes[0].created_at.isoformat() if matching_changes else None
+            matching_events.sort(key=lambda e: e.created_at, reverse=True)
+            last_edit = matching_events[0].created_at.isoformat() if matching_events else None
 
             rows.append(
                 {
