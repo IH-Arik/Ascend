@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-23 (the one thing nobody could actually do: add a person)
+
+Someone pointed at a screen in the admin dashboard — the little "Add person" window where you type a name, an email, pick a role, and get handed a starter password to pass along — and asked whether it actually worked behind the scenes. It didn't. Anyone could already be *edited* once they existed: change their role, move them to a unit, deactivate them, reset their password. But there was no way to create somebody in the first place. The only path into the system at all was people signing themselves up.
+
+Checked the requirements document before building anything, since a screen existing in a mockup doesn't make it a real requirement — and this one is spelled out plainly: the admin, or an approved roster import, is supposed to be what creates accounts, and signing yourself up is meant to be the minimal exception, not the main road. So this was a genuine hole, not a nice-to-have.
+
+One decision worth recording: earlier this month we deliberately made the *password reset* feature email-only, never showing the password on screen, for good security reasons. This new screen does the opposite — it hands the password straight back to the admin to relay in person. That looked like a contradiction, so it got raised before building rather than quietly resolved either way. The distinction holds up: resetting an existing person's password is a different situation from setting up a brand-new account for someone standing in front of you, and the requirements doc doesn't dictate how the first password should travel. Either way, it never gets stored in the audit trail — that part is unchanged.
+
+Verified the whole thing against the real system rather than trusting it: created accounts both ways (letting the system generate a password and supplying one), signed in as those brand-new people immediately afterward to prove the passwords actually work, confirmed a duplicate email is refused, confirmed a regular admin can create a coach but cannot quietly create another top-level admin, and confirmed the audit trail records who did it without ever recording the password itself.
+
 ## 2026-08-19 (testing everything, on purpose, and it paid off)
 
 Built a Postman collection covering the whole backend - the mobile app's side and the staff dashboard's side kept as two separate sections in one file, so the two people building against them can work independently without stepping on each other's login sessions. Wrote a proper handoff document for whoever's building the mobile app: how auth works, what every screen's data looks like, and the one part that's genuinely easy to get wrong (a few onboarding questions quietly require a follow-up answer or the save gets rejected).

@@ -32,7 +32,12 @@ from app.core.support_pathways import get_support_pathway
 from app.services.auth_service import ACCESS_EXPIRY_DAYS
 from app.models.team_assignment import TeamAssignment
 from app.models.user import User
-from app.schemas.admin_user import ProviderAssignRequest, RoleChangeRequest, UnitAssignRequest
+from app.schemas.admin_user import (
+    AdminCreateUserRequest,
+    ProviderAssignRequest,
+    RoleChangeRequest,
+    UnitAssignRequest,
+)
 from app.services.admin_confirmation_service import AdminConfirmationService
 from app.services.audit_log_service import AuditLogService
 from app.services.email_service import EmailService
@@ -86,6 +91,65 @@ class AdminUserService:
             elif user.activation_date is not None and user.activation_date <= cutoff:
                 inactive.append(user)
         return [self._serialize(u) for u in inactive]
+
+    async def create_user(self, admin: User, payload: AdminCreateUserRequest) -> dict[str, Any]:
+        """Admin directly provisions a new account (DOCX 2A Step 1). Audit logged.
+
+        Mirrors `change_role`'s Superadmin-only gate for admin-level roles,
+        but skips the confirmation-queue detour that gates an existing
+        account's role change - a brand-new account has no prior state to
+        revert via `snapshot_before`, so a mistaken creation is corrected by
+        deactivating it (`deactivate`, already real), not reverting it.
+
+        The generated/chosen `initial_password` is returned once in the
+        response (deliberately different from `reset_password`'s
+        email-only pattern - a real, explicit user decision scoped to
+        initial provisioning, matching the frontend's visible/copyable/
+        regeneratable password field) and is never written to the audit
+        log.
+        """
+        new_role = normalize_role(payload.role)
+        if new_role not in SUPPORTED_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "Unsupported role.", "allowed": list(SUPPORTED_ROLES)},
+            )
+        if new_role in ADMIN_ROLES and admin.role != ROLE_SUPERADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only a Superadmin can provision an admin-level account.",
+            )
+
+        existing = await User.find_one({"email": payload.email.lower()})
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="An account with this email already exists.",
+            )
+
+        initial_password = payload.initial_password or secrets.token_urlsafe(9)
+        user = User(
+            email=payload.email.lower(),
+            full_name=payload.full_name,
+            role=new_role,
+            unit_id=payload.unit_id,
+            is_active=payload.is_active,
+            hashed_password=get_password_hash(initial_password),
+            is_verified=True,
+            activation_date=utc_now(),
+            access_expires_at=utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS),
+        )
+        await user.insert()
+
+        await self.audit_log_service.record(
+            event_type="user_provisioned",
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_entity_type="user",
+            target_entity_id=str(user.id),
+            summary_message=f"Admin provisioned a new {new_role} account for {user.email}.",
+        )
+        return {**self._serialize(user), "initial_password": initial_password}
 
     async def change_role(self, admin: User, user_id: str, payload: RoleChangeRequest) -> dict[str, Any]:
         """Admin changes a user's role. Audit logged."""

@@ -30,6 +30,7 @@ from app.models.scheduler_job_run import SchedulerJobRun
 from app.models.user import User
 from app.schemas.admin_confirmation import ConfirmationRejectRequest
 from app.schemas.admin_user import (
+    AdminCreateUserRequest,
     AdminDeactivationRequest,
     ProviderAssignRequest,
     RoleChangeRequest,
@@ -581,6 +582,20 @@ async def update_emergency_contacts(
 
 
 # --- User / role / unit / provider assignment (DOCX Admin Panel) ---
+
+
+@router.post(
+    "/users",
+    status_code=status.HTTP_201_CREATED,
+    summary="Admin directly provisions a new account",
+)
+async def create_user(
+    payload: AdminCreateUserRequest,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    """Admin provisions a new account (DOCX 2A Step 1). Returns the initial password once."""
+    data = await admin_user_service.create_user(current_user, payload)
+    return success_response("Account provisioned successfully.", data)
 
 
 @router.get("/users", summary="List users")
