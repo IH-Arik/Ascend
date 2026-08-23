@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-08-23, later still yet again (asked "shouldn't this be backend?" and it turned out I owed an apology)
+
+Got shown a live screenshot of a table on the same dashboard — a question registry, 46 rows, split into four groups labeled O, D, W, and M. Asked directly whether it was real, or made up on the frontend like a few other things had turned out to be earlier today.
+
+Checked the live endpoint. It said 40, not 46. And a note I'd written when building it, months of work ago in the same conversation, explicitly claimed the "D" group in the design didn't correspond to anything real — that it looked like an invented sixth category with no backing.
+
+That note was wrong, and re-checking it properly is what caught the mistake. The "D" group isn't a fabricated category at all — it's the daily check-in questions, six of them, already live in production code, driving actual daily check-ins right now. They were just never counted because the piece of code that builds this registry only ever looked at three of the four question sets that exist. Once the fourth is included, the real total is 46. Exactly what the design showed. The screen wasn't inventing a number — the backend was undercounting.
+
+Fixed the count, and while in there, added one more thing honestly: each question's scoring direction, "higher is better" or "lower is better," computed the same way the real scoring code computes it rather than guessed at. Every single question in the system currently scores the same direction, so that part checks out too.
+
+One thing still doesn't have a real answer behind it: a "validation" status shown per question. Nothing in the requirements or the codebase tracks that at the individual-question level — the closest real concept is a whole different feature (versioning and approval for the question bank as a set) that was never built. Left that column alone rather than inventing a status for it, and flagged it as a real gap if it's wanted.
+
 ## 2026-08-23, later still again (a card with six numbers, and one of them was lying)
 
 Fourth gap on the same dashboard today: a summary card up top with six metrics — account status, onboarding, access expiration, assigned providers, effective permissions, purpose consent. None of it existed on the backend. Nothing in the requirements document mentions it either, so unlike some of today's earlier fixes this one has no paper trail to point at — it's real data built to serve a screen that Figma invented on its own.
