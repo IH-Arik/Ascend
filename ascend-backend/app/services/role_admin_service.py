@@ -55,11 +55,13 @@ must use the real route gates, never this matrix.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from app.core.question_registry import COMPONENT_ROUTING
 from app.core.roles import (
     ADMIN_ROLES,
+    ROLE_AIRMAN,
     ROLE_CLUSTER,
     ROLE_LEADERSHIP,
     ROLE_PTIM,
@@ -73,6 +75,7 @@ from app.core.roles import (
 from app.core.security import utc_now
 from app.core.support_pathways import get_support_pathways
 from app.models.audit_log import AuditLog
+from app.models.pending_confirmation import PendingConfirmation
 from app.models.role_scope_config import DEFAULT_COHORT_K, DEFAULT_VISIBLE_COMPONENTS, RoleScopeConfig
 from app.models.team_assignment import TeamAssignment
 from app.models.user import User
@@ -271,6 +274,89 @@ class RoleAdminService:
             "roles": rows,
             "purpose_consent": await self._purpose_consent_summary(),
         }
+
+    async def get_accounts_and_onboarding_summary(self) -> dict[str, Any]:
+        """The Roles & RBAC screen's "Accounts & onboarding" card (6 metrics).
+
+        Not DOCX-sourced (a Figma screenshot triggered this). Every metric
+        below is real data with two deliberate corrections:
+
+        1. The mock's Access Expiration panel reads "All scopes renew
+           automatically on annual review", but `app/models/user.py`
+           already documents that `access_expires_at` is "not auto-renewed
+           by any background process" - renewal is a manual Admin action
+           (`POST /admin/users/{id}/renew-access`). Product owner chose
+           (2026-08-23) to keep this panel honest: real counts plus an
+           explicit `renewal_note` stating renewal is manual.
+        2. Onboarding is scoped to `ROLE_AIRMAN` only, not every account.
+           `ROLE_PERMISSIONS` (`app/core/roles.py`) grants
+           `complete_onboarding` exclusively to Airman, and the onboarding
+           routes are never called by any other role - a staff/admin
+           account's `onboarding_status` sits at its model default
+           ("incomplete") forever, not because onboarding is stuck, but
+           because the concept never applies to them. Counting every role
+           would have inflated "in flight" with accounts that were never
+           onboarding in the first place (caught live: 116/117 accounts
+           counted before this fix, because ~55 of them are staff/admin).
+        """
+        users = await User.find_all().to_list()
+
+        active_count = sum(1 for u in users if u.is_active)
+        access_expiration = self._access_expiration_summary(users)
+
+        onboarding_in_flight_count = sum(
+            1 for u in users if u.role == ROLE_AIRMAN and u.onboarding_status != "completed"
+        )
+        awaiting_role_confirmation_count = await PendingConfirmation.find(
+            PendingConfirmation.action_type == "role_change",
+            PendingConfirmation.status == "pending",
+        ).count()
+
+        assigned_provider_pathways = [
+            p["key"] for p in get_support_pathways() if p["always_available"]
+        ]
+
+        return {
+            "account_status": {
+                "active_count": active_count,
+                "expired_count": access_expiration["expired_count"],
+                "total_count": len(users),
+            },
+            "onboarding": {
+                "in_flight_count": onboarding_in_flight_count,
+                "awaiting_role_confirmation_count": awaiting_role_confirmation_count,
+            },
+            "access_expiration": {
+                **access_expiration,
+                "renewal_note": (
+                    "Requires manual renewal via Admin "
+                    "(POST /admin/users/{id}/renew-access) - not automatic."
+                ),
+            },
+            "assigned_providers": {
+                "always_available_pathways": assigned_provider_pathways,
+            },
+            "effective_permissions": {
+                "note": "See GET /roles/matrix for the full role x capability RBAC matrix.",
+            },
+            "purpose_consent": await self._purpose_consent_summary(),
+        }
+
+    def _access_expiration_summary(self, users: list[User], expiring_soon_days: int = 30) -> dict[str, Any]:
+        """Real `User.access_expires_at` counts - not DOCX-sourced (see `app/models/user.py`).
+
+        Shared by `get_accounts_and_onboarding_summary` and the System
+        overview dashboard (`ProviderDashboardService._access_expiration_summary`,
+        an independent copy with the same logic - not imported from here to
+        avoid a cross-service dependency for one small helper).
+        """
+        soon_cutoff = utc_now() + timedelta(days=expiring_soon_days)
+        with_expiry = [u for u in users if u.access_expires_at is not None]
+        expired_count = sum(1 for u in with_expiry if u.access_expires_at < utc_now())
+        expiring_soon_count = sum(
+            1 for u in with_expiry if utc_now() <= u.access_expires_at <= soon_cutoff
+        )
+        return {"expiring_soon_30d_count": expiring_soon_count, "expired_count": expired_count}
 
     async def get_matrix(self) -> dict[str, Any]:
         """The Roles & RBAC screen's declared policy matrix (9 rows x 10 columns).

@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-23, later still again (a card with six numbers, and one of them was lying)
+
+Fourth gap on the same dashboard today: a summary card up top with six metrics — account status, onboarding, access expiration, assigned providers, effective permissions, purpose consent. None of it existed on the backend. Nothing in the requirements document mentions it either, so unlike some of today's earlier fixes this one has no paper trail to point at — it's real data built to serve a screen that Figma invented on its own.
+
+Most of the six were straightforward: count active accounts, count expired ones, list who's automatically assigned (Fitness and Injury-Recovery, same as everywhere else in the app), point at the RBAC matrix already built earlier today for "effective permissions," reuse a consent summary that already existed. Two of them weren't straightforward at all.
+
+The access-expiration panel's mock copy says access renews automatically every year. It doesn't — the code that manages this field says so directly, in a comment written back when that feature was built: nothing renews it, an admin has to do it by hand. Asked which way to go rather than guessing, and the answer was to keep the real behavior and say so plainly, instead of quietly matching a screen that's wrong.
+
+The onboarding count needed no such conversation, because the bug it was hiding wasn't a judgment call — it was just wrong. First pass counted every account whose onboarding wasn't marked complete, and got back 116 of 117. Almost nobody, it turned out, had actually finished onboarding — except that "onboarding" isn't a thing staff and admin accounts ever go through in the first place. Only field operators have that permission at all; every other role's status field just sits at its starting value forever because nothing ever moves it. The real number, once scoped to the role onboarding actually applies to, is 65 — checked by hand against a direct breakdown of every account by role and status before trusting it.
+
 ## 2026-08-23, later still (a one-line fix that would have been wrong)
 
 Third gap on the same dashboard today: the people table has a "Last edit" column, and nothing was filling it. Every other column in that table — name, email, role, unit, status — already had real data behind it. That one didn't.

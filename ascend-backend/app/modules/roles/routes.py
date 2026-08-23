@@ -45,6 +45,18 @@ async def get_role_catalog(
     return success_response("Role catalog loaded successfully.", data)
 
 
+@router.get(
+    "/accounts-onboarding-summary",
+    summary="Accounts & onboarding card - account status, onboarding, access expiration, assigned providers, permissions, purpose consent",
+)
+async def get_accounts_onboarding_summary(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+) -> dict[str, Any]:
+    """Real per-metric counts for the Roles & RBAC "Accounts & onboarding" card."""
+    data = await role_admin_service.get_accounts_and_onboarding_summary()
+    return success_response("Accounts & onboarding summary loaded successfully.", data)
+
+
 @router.get("/matrix", summary="RBAC matrix - role x permission, full/gated/none")
 async def get_role_matrix(
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
