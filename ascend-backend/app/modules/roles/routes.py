@@ -12,10 +12,13 @@ from app.core.roles import SUPPORTED_ROLES
 from app.core.roles import permissions_for_role
 from app.models.user import User
 from app.schemas.org_unit import RoleScopeConfigUpdate
+from app.schemas.pathway_approval import PathwayEnableRequest
+from app.services.pathway_approval_service import PathwayApprovalService
 from app.services.role_admin_service import RoleAdminService
 
 router = APIRouter()
 role_admin_service = RoleAdminService()
+pathway_approval_service = PathwayApprovalService()
 
 
 @router.get("", summary="List supported roles")
@@ -112,13 +115,37 @@ async def resolve_scope(
     return success_response("Scope resolved successfully.", data)
 
 
-@router.get("/pathway-matrix", summary="Conditional pathway matrix - partial real, no fabricated dates")
+@router.get("/pathway-matrix", summary="Conditional pathway matrix - real staffing/opt-in + real approval/enablement")
 async def get_pathway_matrix(
     current_user: User = Depends(require_roles(*ADMIN_ROLES)),
 ) -> dict[str, Any]:
-    """Real staffing/opt-in counts for the 3 optional pathways; no invented approval/enablement dates."""
+    """Real staffing/opt-in counts for the 3 optional pathways, merged with each one's real `PathwayApproval` state."""
     data = await role_admin_service.get_pathway_matrix()
+    approvals = {p["pathway_key"]: p for p in (await pathway_approval_service.list_all())["pathways"]}
+    for row in data["pathways"]:
+        row["approval"] = approvals.get(row["pathway_key"])
     return success_response("Pathway matrix loaded successfully.", data)
+
+
+@router.post("/pathway-approvals/{pathway_key}/approve", summary="Approve an optional support pathway")
+async def approve_pathway(
+    pathway_key: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+) -> dict[str, Any]:
+    """Admin/Superadmin approves one of the 3 optional pathways (Nutritionist, Mental Performance, Chaplain)."""
+    data = await pathway_approval_service.approve(current_user, pathway_key)
+    return success_response("Pathway approved successfully.", data)
+
+
+@router.post("/pathway-approvals/{pathway_key}/enable", summary="Enable a previously-approved optional support pathway")
+async def enable_pathway(
+    pathway_key: str,
+    payload: PathwayEnableRequest,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+) -> dict[str, Any]:
+    """Admin/Superadmin enables a pathway already approved, optionally recording its access policy."""
+    data = await pathway_approval_service.enable(current_user, pathway_key, payload)
+    return success_response("Pathway enabled successfully.", data)
 
 
 @router.get("/me", summary="List current role permissions")

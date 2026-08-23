@@ -20,6 +20,7 @@ from app.models.oft_record import OFTRecord
 from app.models.onboarding_answer import OnboardingAnswer
 from app.models.ops_snapshot import OpsSnapshot
 from app.models.org_unit import OrgUnit
+from app.models.pathway_approval import PathwayApproval
 from app.models.pending_confirmation import PendingConfirmation
 from app.models.provider_credential import ProviderCredential
 from app.models.reconditioning_event import ReconditioningEvent
@@ -64,6 +65,7 @@ __all__ = [
     "OnboardingAnswer",
     "OpsSnapshot",
     "OrgUnit",
+    "PathwayApproval",
     "PendingConfirmation",
     "ProviderCredential",
     "ReconditioningEvent",

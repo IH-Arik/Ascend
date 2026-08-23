@@ -30,6 +30,7 @@ from app.models import OFTRecord
 from app.models import OnboardingAnswer
 from app.models import OpsSnapshot
 from app.models import OrgUnit
+from app.models import PathwayApproval
 from app.models import PendingConfirmation
 from app.models import ProviderCredential
 from app.models import ReconditioningEvent
@@ -110,6 +111,7 @@ async def init_db() -> None:
                 CoverageLog,
                 ScoringConfig,
                 ReportExport,
+                PathwayApproval,
                 PendingConfirmation,
                 SchedulerJobRun,
                 OrgUnit,

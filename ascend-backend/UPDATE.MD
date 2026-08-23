@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-08-23, later still one more time (walked the whole page, found the same story four times over)
+
+Kept following the same trail onto a different page — the one that shows who can see what, at what level, and under what size limit. Circled a piece of it, asked whether it was real.
+
+Went through it panel by panel this time instead of stopping at the first one. A unit picker with six names that don't exist anywhere in the real system. A cohort-size selector that only pretends to save anything — clicking it changes nothing outside the browser tab. A box of "resolved paths" that's three paragraphs of text typed directly into the page, completely disconnected from whatever unit or role is actually selected above it. A table further down whose columns have the right names but wrong values — it claims two particular roles have a restricted view at the top organizational level, when the real system gives them no view at all up there, restricted or otherwise. And a second table where two whole columns are the exact same sentence, word for word, copy-pasted onto every row regardless of what row it's on.
+
+Every one of those four panels turned out to be disconnected from the real system, which already has working, tested endpoints sitting right behind all of it, unused. Confirmed that by calling each one directly and getting back real, sensible numbers.
+
+One piece of what was circled had nothing behind it anywhere — not in the requirements, not as a byproduct of any other real feature. A record of who approved a given specialist track being offered, and when it was actually switched on. Asked directly whether to build that as new, standalone work even without a requirement pointing at it, and the answer was yes.
+
+Built it as a small two-step state machine: approved, then separately enabled — matching how the screen described it, and refusing to let something be turned on before it's been approved. Neither step requires a second person to sign off, unlike the handful of genuinely high-stakes actions elsewhere in this system that do require that. Tested the refusal paths deliberately: tried to enable before approving (correctly blocked), tried to approve something that doesn't need approval at all (correctly blocked), then ran the real sequence through cleanly and watched the surrounding table update to reflect it.
+
 ## 2026-08-23, later still once more (the one column that really was empty)
 
 Followed the same table one step further. Circled two columns and asked directly whether they were missing. One of them, it turned out, already had a real answer as of the last fix — it just hadn't been wired up on the screen yet. The other one genuinely had nothing behind it anywhere, on either side.
