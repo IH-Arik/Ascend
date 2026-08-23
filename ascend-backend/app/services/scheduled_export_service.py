@@ -85,6 +85,8 @@ class ScheduledExportService:
             report_type=payload.report_type,
             export_format=payload.export_format,
             cadence=payload.cadence,
+            recipient_role=payload.recipient_role,
+            sensitivity_level=REPORT_SENSITIVITY.get(payload.report_type, "controlled"),
             next_run_at=_advance(utc_now(), payload.cadence),
             created_by=admin.id,
         )
@@ -169,11 +171,22 @@ class ScheduledExportService:
             if REPORT_SENSITIVITY.get(schedule.report_type, "controlled") == "restricted":
                 row_count = len(report_rows(schedule.report_type, report_data))
                 await self.admin_confirmation_service.request_export(
-                    creator, schedule.report_type, "scheduled", "restricted", row_count, schedule.export_format
+                    creator,
+                    schedule.report_type,
+                    "scheduled",
+                    "restricted",
+                    row_count,
+                    schedule.export_format,
+                    recipient_role=schedule.recipient_role,
                 )
             else:
                 await self.report_export_service.export_report(
-                    schedule.report_type, report_data, creator, "scheduled", schedule.export_format
+                    schedule.report_type,
+                    report_data,
+                    creator,
+                    "scheduled",
+                    schedule.export_format,
+                    recipient_role=schedule.recipient_role,
                 )
 
             schedule.next_run_at = _advance(schedule.next_run_at, schedule.cadence)
@@ -189,6 +202,8 @@ class ScheduledExportService:
             "report_type": schedule.report_type,
             "export_format": schedule.export_format,
             "cadence": schedule.cadence,
+            "recipient_role": schedule.recipient_role,
+            "sensitivity_level": schedule.sensitivity_level,
             "status": schedule.status,
             "next_run_at": schedule.next_run_at.isoformat(),
             "created_by": str(schedule.created_by),

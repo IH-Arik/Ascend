@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-08-23, later still yet again once more (chased a placeholder name back to where it actually lived)
+
+A modal this time — a form for scheduling a recurring export, with a field asking who it should go to and another asking what slice of data it covers.
+
+Two of the four fields in that form had nothing behind them anywhere. Went looking at the code for the button that submits it, and the trail went cold fast: nothing in that whole page ever calls out to anywhere else. It just edits a list sitting in the browser's own memory. Some of the entries in that list, sitting right there in the screenshot, were obvious throwaway placeholder words — and searching the entire codebase for those exact words turned up nothing. Someone had typed test text into that form once, clicked submit, and it went precisely nowhere, because there was nowhere for it to go.
+
+One of the two empty fields — who receives the export — wasn't actually a new idea. The requirements document already describes this exact piece of information as part of every export record, and the system already tracks it for one-off exports, just quietly filling it in with "whoever clicked export" instead of asking. Made it a real, required question here too, and reused the honest fallback for the case where nobody was asking before.
+
+The other field — what slice of data — could have been added the same easy way: a text box that just gets saved as typed. Didn't do that, on purpose. This system already has a real, working way of deciding whether a given kind of report is broad-and-safe or narrow-and-sensitive, and that decision already controls something serious — whether a second person has to sign off before it goes out. A second, hand-typed field claiming to say the same thing would just be a second story that can quietly stop matching the first one. Used the real one instead, computed automatically from what kind of report it is, the moment the schedule is created.
+
+Didn't stop at proving the form saves correctly, either — actually advanced the clock on two real schedules and ran the same function the hourly job runs, to watch what happens when one of these finally executes for real. Both came out right: the everyday one went straight through with the right person's name attached, and the sensitive one landed in the same second-reviewer queue every other sensitive export already goes through, also correctly labeled.
+
 ## 2026-08-23, later still one more time again (a promise made in a comment, never actually kept)
 
 One more page, one more set of four small number cards at the top. Checked the page's own code first this time, out of habit by now — all four are typed-in numbers, same as everything else today.

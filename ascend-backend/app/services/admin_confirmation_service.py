@@ -129,13 +129,19 @@ class AdminConfirmationService:
         sensitivity_level: str,
         row_count: int,
         export_format: str = "csv",
+        recipient_role: str | None = None,
     ) -> tuple[PendingConfirmation, ReportExport]:
-        """Create a pending confirmation + `ReportExport` row for a restricted-sensitivity export."""
+        """Create a pending confirmation + `ReportExport` row for a restricted-sensitivity export.
+
+        `recipient_role` defaults to the requesting admin's own role unless
+        a real one is supplied - a recurring `ScheduledExport` passes its
+        own admin-configured recipient_role.
+        """
         export_log = ReportExport(
             report_type=report_type,
             date_range=date_range,
             generated_by=admin.id,
-            recipient_role=admin.role,
+            recipient_role=recipient_role or admin.role,
             export_format=export_format,
             sensitivity_level=sensitivity_level,
             export_log_status="pending_approval",

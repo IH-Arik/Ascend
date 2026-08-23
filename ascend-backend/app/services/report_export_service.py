@@ -229,12 +229,16 @@ class ReportExportService:
         export_format: str = "csv",
         title: str | None = None,
         flight_id: str | None = None,
+        recipient_role: str | None = None,
     ) -> tuple[bytes, str]:
         """Render a non-restricted report in the requested format and write its export-log entry.
 
         `title` falls back to a titleized `report_type` when not given, so
         every `ReportExport` row always has something real to search
-        against (`search()` below) - never a blank field.
+        against (`search()` below) - never a blank field. `recipient_role`
+        defaults to the generating admin's own role (the original
+        behavior) unless a real one is supplied - a recurring
+        `ScheduledExport` passes its own admin-configured recipient_role.
         """
         content_bytes, _ = self.render(report_type, report_data, export_format)
         file_name = f"{report_type}_{date_range}.{export_format}"
@@ -243,7 +247,7 @@ class ReportExportService:
             report_type=report_type,
             date_range=date_range,
             generated_by=generated_by.id,
-            recipient_role=generated_by.role,
+            recipient_role=recipient_role or generated_by.role,
             export_format=export_format,
             sensitivity_level=REPORT_SENSITIVITY.get(report_type, "controlled"),
             title=title or report_type.replace("_", " ").title(),
