@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     app_debug: bool = Field(default=True, alias="APP_DEBUG")
     app_host: str = Field(default="127.0.0.1", alias="APP_HOST")
     app_port: int = Field(default=8010, alias="APP_PORT")
+    cors_origins: list[str] = Field(default=["*"], alias="CORS_ORIGINS")
     api_v1_prefix: str = Field(default="/api/v1", alias="API_V1_PREFIX")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     secret_key: str = Field(default="change-me", alias="SECRET_KEY")
@@ -85,6 +86,18 @@ class Settings(BaseSettings):
             if normalized in {"false", "0", "no", "off"}:
                 return False
         raise ValueError("Expected a boolean-compatible value.")
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: Any) -> list[str]:
+        """Parse CORS origins from a comma-separated string or list."""
+        if isinstance(value, str):
+            if not value.strip():
+                return ["*"]
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        if isinstance(value, list):
+            return [str(origin).strip() for origin in value]
+        return ["*"]
 
 
 @lru_cache
