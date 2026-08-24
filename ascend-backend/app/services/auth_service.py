@@ -34,6 +34,7 @@ from app.schemas.auth import (
     VerifyResetCodeRequest,
 )
 from app.services.audit_log_service import AuditLogService
+from app.services.email_service import EmailService
 
 CODE_EXPIRY_MINUTES = 10
 REMEMBER_ME_REFRESH_MULTIPLIER = 2
@@ -48,6 +49,7 @@ class AuthService:
 
     def __init__(self) -> None:
         self.audit_log_service = AuditLogService()
+        self.email_service = EmailService()
 
     async def register_user(self, payload: RegisterRequest) -> dict[str, Any]:
         """Register a user and issue auth tokens."""
@@ -107,6 +109,16 @@ class AuthService:
             ) from exc
 
         self._log_delivery_code("verification", user.email, verification_code)
+        await self.email_service.send(
+            to=user.email,
+            subject="Ascend – Verify Your Email",
+            html_body=(
+                f"<p>Hello {user.full_name},</p>"
+                f"<p>Your Ascend email verification code is: <strong>{verification_code}</strong></p>"
+                f"<p>This code expires in {CODE_EXPIRY_MINUTES} minutes.</p>"
+                f"<p>If you did not register, you can ignore this email.</p>"
+            ),
+        )
         return self._build_token_response(user)
 
     def _resolve_role(self, payload: RegisterRequest) -> str:
@@ -228,6 +240,16 @@ class AuthService:
         user.updated_at = utc_now()
         await user.save()
         self._log_delivery_code("verification-resend", user.email, verification_code)
+        await self.email_service.send(
+            to=user.email,
+            subject="Ascend – New Verification Code",
+            html_body=(
+                f"<p>Hello {user.full_name},</p>"
+                f"<p>Your new Ascend email verification code is: <strong>{verification_code}</strong></p>"
+                f"<p>This code expires in {CODE_EXPIRY_MINUTES} minutes.</p>"
+                f"<p>If you did not request this, you can ignore this email.</p>"
+            ),
+        )
         return {}
 
     async def forgot_password(self, payload: ForgotPasswordRequest) -> dict[str, Any]:
@@ -242,6 +264,16 @@ class AuthService:
         user.updated_at = utc_now()
         await user.save()
         self._log_delivery_code("password-reset", user.email, reset_code)
+        await self.email_service.send(
+            to=user.email,
+            subject="Ascend – Password Reset Code",
+            html_body=(
+                f"<p>Hello {user.full_name},</p>"
+                f"<p>Your Ascend password reset code is: <strong>{reset_code}</strong></p>"
+                f"<p>This code expires in {CODE_EXPIRY_MINUTES} minutes.</p>"
+                f"<p>If you did not request a password reset, you can ignore this email.</p>"
+            ),
+        )
         return {}
 
     async def verify_reset_code(
@@ -451,7 +483,7 @@ class AuthService:
         return expires_at is None or expires_at <= utc_now()
 
     def _log_delivery_code(self, code_type: str, email: str, code: str) -> None:
-        """Log auth codes until Gmail delivery is wired."""
+        """Log auth codes for audit trail alongside email delivery."""
         logger.info(
             "Ascend %s code generated for %s. Code: %s",
             code_type,
