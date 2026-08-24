@@ -20,6 +20,9 @@ class User(Document):
     role: str = "Airman"
     unit_id: str | None = None
     rank_grade: str | None = None
+    avatar_storage_path: str | None = None
+    avatar_content_type: str | None = None
+    avatar_uploaded_at: datetime | None = None
     theme_preference: str = "dark"
     notifications_enabled: bool = True
     activation_date: datetime | None = None

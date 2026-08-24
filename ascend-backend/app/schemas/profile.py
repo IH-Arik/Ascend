@@ -4,6 +4,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
+AVATAR_MAX_BYTES = 5 * 1024 * 1024
+AVATAR_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic"}
+AVATAR_CONTENT_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".heic": "image/heic",
+}
+
 
 class AssignedProvider(BaseModel):
     """A provider assigned to the user through My Support Team."""
@@ -29,6 +38,7 @@ class ProfileResponse(BaseModel):
     role: str
     unit_id: str | None
     rank_grade: str | None
+    avatar_available: bool
     is_verified: bool
     onboarding_completed: bool
     onboarding_status: str
@@ -54,8 +64,29 @@ class ProfileResponse(BaseModel):
 
 
 class UpdateProfileSettingsRequest(BaseModel):
-    """Locally controllable profile settings the user can edit themselves."""
+    """Locally controllable profile settings the user can edit themselves.
 
+    `full_name` is included here (self-reported, not CAC-sourced - see
+    `profile_service.py`'s module docstring). `role` and `unit_id` are
+    deliberately absent: those remain admin/provisioning-set, since a
+    self-service edit of either would be a real authorization/assignment
+    risk, not a cosmetic preference like a name correction.
+    """
+
+    full_name: str | None = Field(default=None, min_length=2, max_length=120)
     rank_grade: str | None = Field(default=None, max_length=40)
     theme_preference: str | None = None
     notifications_enabled: bool | None = None
+
+
+class ChangeEmailRequest(BaseModel):
+    """A signed-in user changes their own login email.
+
+    Requires the current password (same "prove intent" pattern as
+    `ChangePasswordRequest`) since the email doubles as the login
+    identifier. Re-verification is required afterward - the new address
+    is unverified until the user confirms the code sent to it.
+    """
+
+    new_email: EmailStr
+    current_password: str = Field(min_length=1)

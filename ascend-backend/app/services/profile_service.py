@@ -11,12 +11,24 @@ source or verify one, so it is not fabricated or displayed.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException, UploadFile, status
+
 from app.core.scoring import get_band_meaning
+from app.core.security import utc_now
 from app.models.onboarding_answer import OnboardingAnswer
 from app.models.user import User
-from app.schemas.profile import ProfileResponse, UpdateProfileSettingsRequest
+from app.schemas.profile import (
+    AVATAR_ALLOWED_EXTENSIONS,
+    AVATAR_CONTENT_TYPES,
+    AVATAR_MAX_BYTES,
+    ProfileResponse,
+    UpdateProfileSettingsRequest,
+)
+from app.services.audit_log_service import AuditLogService
+from app.services.file_storage_service import FileStorageService, scan_file_stub
 from app.services.team_service import TeamService
 
 SUPPORT_PATHWAYS_QUESTION_ID = 18
@@ -27,6 +39,8 @@ class ProfileService:
 
     def __init__(self) -> None:
         self.team_service = TeamService()
+        self.audit_log_service = AuditLogService()
+        self.file_storage_service = FileStorageService(namespace="avatars")
 
     async def get_profile(self, user: User) -> dict[str, Any]:
         """Return the authenticated user's profile summary."""
@@ -39,6 +53,7 @@ class ProfileService:
             role=user.role,
             unit_id=user.unit_id,
             rank_grade=user.rank_grade,
+            avatar_available=user.avatar_storage_path is not None,
             is_verified=user.is_verified,
             onboarding_completed=user.onboarding_completed,
             onboarding_status=user.onboarding_status,
@@ -71,15 +86,91 @@ class ProfileService:
     async def update_settings(
         self, user: User, payload: UpdateProfileSettingsRequest
     ) -> dict[str, Any]:
-        """Update the locally controllable profile settings (rank/grade, theme, notifications)."""
+        """Update the locally controllable profile settings (name, rank/grade, theme, notifications)."""
+        if payload.full_name is not None:
+            stripped_name = payload.full_name.strip()
+            if not stripped_name:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Full name cannot be empty.",
+                )
+            user.full_name = stripped_name
         if payload.rank_grade is not None:
             user.rank_grade = payload.rank_grade.strip() or None
         if payload.theme_preference is not None:
             user.theme_preference = payload.theme_preference
         if payload.notifications_enabled is not None:
             user.notifications_enabled = payload.notifications_enabled
+        user.updated_at = utc_now()
         await user.save()
         return await self.get_profile(user)
+
+    async def upload_avatar(self, user: User, file: UploadFile) -> dict[str, Any]:
+        """Upload/replace the user's own profile photo. Real image types only, 5 MB cap."""
+        file_name = file.filename or "avatar"
+        extension = Path(file_name).suffix.lower()
+        if extension not in AVATAR_ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Avatar must be a JPG, PNG, or HEIC image.",
+            )
+        if not scan_file_stub(file_name):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This file type is not allowed.",
+            )
+
+        content = await file.read()
+        if len(content) > AVATAR_MAX_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Avatar exceeds the {AVATAR_MAX_BYTES // (1024 * 1024)} MB limit.",
+            )
+
+        storage_path = self.file_storage_service.save_file(str(user.id), file_name, content)
+        user.avatar_storage_path = storage_path
+        user.avatar_content_type = AVATAR_CONTENT_TYPES[extension]
+        user.avatar_uploaded_at = utc_now()
+        user.updated_at = utc_now()
+        await user.save()
+
+        await self.audit_log_service.record(
+            event_type="avatar_updated",
+            actor_id=user.id,
+            actor_role=user.role,
+            target_entity_type="user",
+            target_entity_id=str(user.id),
+            summary_message="User updated their profile photo.",
+        )
+        return await self.get_profile(user)
+
+    async def delete_avatar(self, user: User) -> dict[str, Any]:
+        """Remove the user's own profile photo, if any."""
+        if user.avatar_storage_path is not None:
+            user.avatar_storage_path = None
+            user.avatar_content_type = None
+            user.avatar_uploaded_at = None
+            user.updated_at = utc_now()
+            await user.save()
+            await self.audit_log_service.record(
+                event_type="avatar_removed",
+                actor_id=user.id,
+                actor_role=user.role,
+                target_entity_type="user",
+                target_entity_id=str(user.id),
+                summary_message="User removed their profile photo.",
+            )
+        return await self.get_profile(user)
+
+    async def get_avatar_bytes(self, target: User) -> tuple[bytes, str]:
+        """Return the raw decrypted avatar bytes and content-type for a user."""
+        if target.avatar_storage_path is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="This user has no profile photo set.",
+            )
+        content = self.file_storage_service.read_file(target.avatar_storage_path)
+        return content, target.avatar_content_type or "application/octet-stream"
 
     async def _get_support_pathways(self, user: User) -> list[str]:
         """Return the support pathways the user opted into during onboarding."""

@@ -33,6 +33,7 @@ from app.schemas.auth import (
     VerifyEmailRequest,
     VerifyResetCodeRequest,
 )
+from app.schemas.profile import ChangeEmailRequest
 from app.services.audit_log_service import AuditLogService
 from app.services.email_service import EmailService
 
@@ -371,6 +372,72 @@ class AuthService:
             summary_message="User changed their own password.",
         )
         return {"changed": True}
+
+    async def change_email(self, user: User, payload: ChangeEmailRequest) -> dict[str, Any]:
+        """A signed-in user changes their own login email. Requires the current
+        password and re-triggers email verification against the new address.
+
+        Not DOCX-sourced (the DOCX's User Profile data dictionary lists `role`/
+        `unit`/`team` as admin-provisioned but never addresses self-service email
+        changes either way) - a real, genuine gap: a typo'd or outdated
+        registration email had no correction path at all before this. Distinct
+        from `change_password`: proving intent still requires the current
+        password, but the outcome also flips `is_verified` back to False and
+        sends a fresh verification code to the new address, since the old
+        code/expiry were only ever valid for the old email.
+        """
+        if not verify_password(payload.current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect.",
+            )
+
+        new_email = payload.new_email.lower()
+        old_email = user.email
+        if new_email == old_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New email must be different from the current email.",
+            )
+
+        existing = await User.find_one({"email": new_email})
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="An account with this email already exists.",
+            )
+
+        verification_code = self._generate_code()
+        user.email = new_email
+        user.is_verified = False
+        user.email_verification_code = verification_code
+        user.email_verification_expires_at = utc_now() + timedelta(minutes=CODE_EXPIRY_MINUTES)
+        user.updated_at = utc_now()
+        await user.save()
+
+        await self.audit_log_service.record(
+            event_type="email_changed",
+            actor_id=user.id,
+            actor_role=user.role,
+            target_entity_type="user",
+            target_entity_id=str(user.id),
+            summary_message="User changed their own login email.",
+            metadata_payload={"old_email": old_email, "new_email": new_email},
+        )
+
+        self._log_delivery_code("email-change-verification", user.email, verification_code)
+        await self.email_service.send(
+            to=user.email,
+            subject="Ascend – Verify Your New Email",
+            html_body=(
+                f"<p>Hello {user.full_name},</p>"
+                f"<p>Your Ascend account email was just changed to this address. "
+                f"Your verification code is: <strong>{verification_code}</strong></p>"
+                f"<p>This code expires in {CODE_EXPIRY_MINUTES} minutes.</p>"
+                f"<p>If you did not request this change, contact your DWS Admin immediately.</p>"
+            ),
+        )
+        return {"user": self._serialize_user(user)}
 
     async def get_me(self, user: User) -> dict[str, Any]:
         """Return the current authenticated user payload."""
