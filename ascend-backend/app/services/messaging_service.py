@@ -41,6 +41,7 @@ from beanie import PydanticObjectId
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.notification_rules import MESSAGE_RECEIVED
+from app.core.notification_rules import highest_opsec_severity
 from app.core.notification_rules import scan_for_opsec_terms
 from app.core.roles import (
     ADMIN_ROLES,
@@ -138,11 +139,23 @@ class MessagingService:
 
         blocked_terms = scan_for_opsec_terms(payload.body)
         if blocked_terms:
+            severity = highest_opsec_severity(blocked_terms)
+            await self.audit_log_service.record(
+                event_type="message_blocked_opsec",
+                actor_id=sender.id,
+                actor_role=sender.role,
+                target_entity_type="user",
+                target_entity_id=str(recipient.id),
+                summary_message=f"Message to {recipient.email} blocked by OPSEC scan (severity {severity}).",
+                metadata_payload={"blocked_terms": blocked_terms, "severity": severity},
+                outcome_status="blocked",
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "message": "Message content was blocked by the OPSEC content scan.",
                     "blocked_terms": blocked_terms,
+                    "severity": severity,
                 },
             )
 
@@ -306,7 +319,8 @@ class MessagingService:
 
     async def scan_preview(self, body: str) -> dict[str, Any]:
         """Preview which OPSEC-blocked terms a message body would trigger, without sending it."""
-        return {"blocked_terms": scan_for_opsec_terms(body)}
+        blocked_terms = scan_for_opsec_terms(body)
+        return {"blocked_terms": blocked_terms, "severity": highest_opsec_severity(blocked_terms)}
 
     async def get_message_trace(self, user: User, message_id: str) -> dict[str, Any]:
         """Return the "Audit & decisions" trace panel for one message."""
@@ -418,11 +432,23 @@ class MessagingService:
 
         blocked_terms = scan_for_opsec_terms(body)
         if blocked_terms:
+            severity = highest_opsec_severity(blocked_terms)
+            await self.audit_log_service.record(
+                event_type="message_blocked_opsec",
+                actor_id=sender.id,
+                actor_role=sender.role,
+                target_entity_type="message_thread",
+                target_entity_id=str(thread.id),
+                summary_message=f"Group message in thread {thread.id} blocked by OPSEC scan (severity {severity}).",
+                metadata_payload={"blocked_terms": blocked_terms, "severity": severity},
+                outcome_status="blocked",
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "message": "Message content was blocked by the OPSEC content scan.",
                     "blocked_terms": blocked_terms,
+                    "severity": severity,
                 },
             )
 

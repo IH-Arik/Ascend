@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-24 (a filter that already worked, plus one silent hole found while widening it)
+
+Pulled the mobile app fresh and read through every real screen in it, comparing what each one describes against what this backend actually does. Almost none of it is wired up yet — same story as the admin dashboard, a fully-built interface with nothing connecting it to the real system underneath. But the interesting part wasn't the wiring gap. It was how *accurately* the interface described real backend behavior it was never actually calling — down to exact internal field names and an exact weekly reset rule, matching this backend's real logic almost word for word, on a screen with zero connection to it. Whoever built that interface clearly understood the real system deeply, even without touching it.
+
+Out of everything checked, two things had genuinely nothing behind them. One is a full alternate sign-in system built around military ID cards — out of scope for today, correctly set aside as its own separate piece of work. The other was smaller and worth finishing: a message-content filter that already exists and already works — it catches a short list of sensitive terms and refuses to send anything containing one — but the interface describes it as having five levels of seriousness, and the real filter had exactly one level: caught or not caught.
+
+Added the graduated version without touching how the filter actually behaves. Every flagged term still blocks the message exactly as before — nothing got looser, because loosening a safety check on my own judgment, with no one asking for that specifically, isn't a call to make alone. What changed is that a blocked message now carries a real severity number instead of just a yes/no, based on how specific and unambiguous the flagged term actually is — a literal coordinate reference rates higher than a common word like "mission" that shows up plenty of times with no operational meaning at all.
+
+While in there, found something that had nothing to do with severity at all: when a message got blocked, it left no trace anywhere. Not a warning, not a log line, nothing — as if the attempt had never happened. Every other real action in this system writes a record of what happened; a blocked message quietly didn't. Fixed that too, since it was sitting right there and was clearly supposed to work like everything else. Tested by actually trying to send messages with real flagged content and confirming both the severity number came back correct and the attempt now shows up in the real record of what happened — and separately confirmed an ordinary, harmless message still goes through exactly as before.
+
 ## 2026-08-23, later still once more (two real numbers, and three honest refusals)
 
 A whole status page this time, asked all at once — an uptime figure, a services table, session counts, a compliance badge, a backup timestamp, a rate table. Eight small numbers and two tables.

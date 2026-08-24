@@ -62,18 +62,39 @@ def get_category(family: str) -> str:
 # a simple deny-list, not a real DLP/classification system - it exists to
 # catch obviously unsafe provider-authored text (e.g. free-typed assigned
 # action instructions), not to guarantee OPSEC safety in general.
-OPSEC_BLOCKED_TERMS: tuple[str, ...] = (
-    "mission",
-    "deployment",
-    "op order",
-    "operation order",
-    "grid coordinates",
-    "grid reference",
-    "convoy",
-    "unit location",
-    "classified",
-    "troop movement",
-)
+#
+# Severity (1-5) added 2026-08-24, closing a real mobile-app gap: the
+# Support "chat" screen's own audit sheet and the "Data-use summary" screen
+# both describe a graduated scale ("Level 5 (highest) never routes through
+# messaging"), but this scan was previously an undifferentiated flat list -
+# every match blocked identically, with no severity concept at all. Not
+# DOCX-sourced (checked - zero hits for "OPSEC severity"/"keyword scan"
+# anywhere in the DOCX), so the specific level per term below is our own
+# reasonable classification, not a requirement. Every term still blocks the
+# send regardless of level - severity is real, added metadata for audit/
+# reporting granularity, not a loosening of the existing block-on-any-match
+# behavior (an unreviewed severity-based allow-through would be a real
+# security regression this session has no basis to make on its own).
+# 5 = specific, unambiguous geolocation/movement data - the clearest actual
+#     OPSEC exposure if sent.
+# 3 = real operational-planning terms, but more likely to appear in
+#     legitimate non-sensitive context (higher false-positive risk).
+OPSEC_TERM_SEVERITY: dict[str, int] = {
+    "grid coordinates": 5,
+    "grid reference": 5,
+    "troop movement": 5,
+    "convoy": 5,
+    "unit location": 5,
+    "op order": 4,
+    "operation order": 4,
+    "classified": 4,
+    "mission": 3,
+    "deployment": 3,
+}
+
+OPSEC_BLOCKED_TERMS: tuple[str, ...] = tuple(OPSEC_TERM_SEVERITY.keys())
+
+OPSEC_MAX_SEVERITY = 5
 
 
 _OPSEC_TERM_PATTERNS = {
@@ -90,3 +111,15 @@ def scan_for_opsec_terms(*texts: str) -> list[str]:
     """
     combined = " ".join(texts)
     return [term for term, pattern in _OPSEC_TERM_PATTERNS.items() if pattern.search(combined)]
+
+
+def opsec_severity(term: str) -> int:
+    """Return one matched term's real severity level (1-5)."""
+    return OPSEC_TERM_SEVERITY.get(term, OPSEC_MAX_SEVERITY)
+
+
+def highest_opsec_severity(terms: list[str]) -> int | None:
+    """Return the highest severity among a set of matched terms, or `None` if empty."""
+    if not terms:
+        return None
+    return max(opsec_severity(term) for term in terms)
