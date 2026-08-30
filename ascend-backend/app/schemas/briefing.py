@@ -22,3 +22,14 @@ class BriefingOutlineUpdateRequest(BaseModel):
     """Edit a draft briefing's outline (add/remove/reorder sections)."""
 
     outline: list[BriefingSectionInput] = Field(min_length=1)
+
+
+class BriefingSendRequest(BaseModel):
+    """Send a briefing, optionally recording which real in-app roles it's addressed to.
+
+    `recipient_roles` is validated against `SUPPORTED_ROLES` in the service
+    layer (real in-app roles, not free-text organizational titles like
+    "CC"/"SEL" - no such concept exists in this system).
+    """
+
+    recipient_roles: list[str] | None = None

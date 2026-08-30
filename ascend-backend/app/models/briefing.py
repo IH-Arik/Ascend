@@ -13,6 +13,15 @@ current real data on every fetch (`BriefingService.get`) - matches the
 screenshot's "Live" preview label. `send()` freezes it at that moment;
 a sent briefing's content never silently changes afterward even if the
 underlying real data does.
+
+`status` (added 2026-08-25, real new scope, explicit go-ahead) is now a
+real 5-state workflow - `draft -> pending_review -> ready -> sent ->
+archived` - not just draft/sent. Review is optional: `send()` still
+accepts `draft` directly (a solo user can skip the review step), or
+`ready` (after a review pass). `recipient_roles` (same commit) is a real,
+`SUPPORTED_ROLES`-validated distribution list captured at send time - not
+free-text organizational titles (no real "CC"/"SEL" concept exists in
+this system), but real in-app roles this sent briefing is addressed to.
 """
 
 from datetime import datetime, timezone
@@ -35,10 +44,12 @@ class Briefing(Document):
     outline: list[dict] = Field(default_factory=list)
     generated_content: dict[str, str] = Field(default_factory=dict)
     status: str = "draft"
+    recipient_roles: list[str] = Field(default_factory=list)
     created_by: PydanticObjectId
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     sent_at: datetime | None = None
+    archived_at: datetime | None = None
 
     class Settings:
         """Beanie collection settings."""

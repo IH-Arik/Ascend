@@ -23,7 +23,7 @@ from app.core.roles import (
     ROLE_SCS,
 )
 from app.models.user import User
-from app.schemas.briefing import BriefingCreateRequest, BriefingOutlineUpdateRequest
+from app.schemas.briefing import BriefingCreateRequest, BriefingOutlineUpdateRequest, BriefingSendRequest
 from app.schemas.leadership_annotation import LeadershipAnnotationCreate
 from app.schemas.scheduled_export import ScheduledExportCreate
 from app.services.briefing_service import BRIEFING_TEMPLATES, BriefingService
@@ -290,14 +290,50 @@ async def update_briefing_outline(
     return success_response("Briefing outline updated successfully.", data)
 
 
-@router.post("/leadership/briefings/{briefing_id}/send", status_code=status.HTTP_200_OK)
-async def send_briefing(
+@router.post("/leadership/briefings/{briefing_id}/submit-for-review", status_code=status.HTTP_200_OK)
+async def submit_briefing_for_review(
     briefing_id: str,
     current_user: User = Depends(require_roles(*LEADERSHIP_ROLES)),
 ) -> dict[str, Any]:
-    """Freeze the briefing's content at its final real state and mark it sent. Audit logged."""
-    data = await briefing_service.send(briefing_id, current_user)
+    """Move a draft briefing into review. Draft-only. Audit logged."""
+    data = await briefing_service.submit_for_review(briefing_id, current_user)
+    return success_response("Briefing submitted for review.", data)
+
+
+@router.post("/leadership/briefings/{briefing_id}/mark-ready", status_code=status.HTTP_200_OK)
+async def mark_briefing_ready(
+    briefing_id: str,
+    current_user: User = Depends(require_roles(*LEADERSHIP_ROLES)),
+) -> dict[str, Any]:
+    """Mark a briefing under review as ready to send. Pending-review-only. Audit logged."""
+    data = await briefing_service.mark_ready(briefing_id, current_user)
+    return success_response("Briefing marked ready to send.", data)
+
+
+@router.post("/leadership/briefings/{briefing_id}/send", status_code=status.HTTP_200_OK)
+async def send_briefing(
+    briefing_id: str,
+    payload: BriefingSendRequest | None = None,
+    current_user: User = Depends(require_roles(*LEADERSHIP_ROLES)),
+) -> dict[str, Any]:
+    """Freeze the briefing's content at its final real state and mark it sent. Audit logged.
+
+    Sendable from draft (review is optional) or ready. `recipient_roles`
+    is optional and validated against the real supported role set.
+    """
+    recipient_roles = payload.recipient_roles if payload else None
+    data = await briefing_service.send(briefing_id, current_user, recipient_roles)
     return success_response("Briefing sent successfully.", data)
+
+
+@router.post("/leadership/briefings/{briefing_id}/archive", status_code=status.HTTP_200_OK)
+async def archive_briefing(
+    briefing_id: str,
+    current_user: User = Depends(require_roles(*LEADERSHIP_ROLES)),
+) -> dict[str, Any]:
+    """Archive a sent briefing. Sent-only. Audit logged."""
+    data = await briefing_service.archive(briefing_id, current_user)
+    return success_response("Briefing archived.", data)
 
 
 @router.get("/leadership/briefings/{briefing_id}/pdf")

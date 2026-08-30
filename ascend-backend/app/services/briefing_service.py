@@ -18,6 +18,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
+from app.core.roles import SUPPORTED_ROLES, is_supported_role, normalize_role
 from app.core.scoring import build_score_band
 from app.core.security import utc_now
 from app.models.audit_log import AuditLog
@@ -70,7 +71,14 @@ BRIEFING_TEMPLATES = {
     },
     "quarterly_wing_review": {
         "title": "Quarterly Wing Review",
-        "sections": ["composite_trend", "band_distribution", "risk_recommendations"],
+        # Realigned 2026-08-25: added mission_context + by_flight (both
+        # real, already-existing section types, not new fabrication) - the
+        # frontend showed 5 sections here including a "Mission context"/
+        # "By-flight comparison" pair with fabricated FY-quarter/"next
+        # quarter" language this backend explicitly never claims. This
+        # gives the same real section composition using only real,
+        # already-honest data - it does not add any FY-quarter framing.
+        "sections": ["mission_context", "composite_trend", "by_flight", "band_distribution", "risk_recommendations"],
     },
 }
 
@@ -137,13 +145,79 @@ class BriefingService:
         await record.save()
         return await self.get(briefing_id)
 
-    async def send(self, briefing_id: str, admin: User) -> dict[str, Any]:
-        """Freeze the briefing's content at its final real state and mark it sent. Audit logged."""
+    async def submit_for_review(self, briefing_id: str, admin: User) -> dict[str, Any]:
+        """Move a draft into review - freezes content at this moment. Draft-only. Audit logged."""
         record = await self._get_or_404(briefing_id)
-        if record.status == "sent":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This briefing was already sent.")
+        if record.status != "draft":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Only a draft briefing can be submitted for review."
+            )
+        record.generated_content = await self._generate_content(record.outline)
+        record.status = "pending_review"
+        record.updated_at = utc_now()
+        await record.save()
+
+        await self.audit_log_service.record(
+            event_type="briefing_submitted_for_review",
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_entity_type="briefing",
+            target_entity_id=str(record.id),
+            summary_message=f"Submitted briefing '{record.title}' for review.",
+        )
+        return self._serialize(record)
+
+    async def mark_ready(self, briefing_id: str, admin: User) -> dict[str, Any]:
+        """Mark a briefing under review as ready to send. Pending-review-only. Audit logged."""
+        record = await self._get_or_404(briefing_id)
+        if record.status != "pending_review":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only a briefing pending review can be marked ready.",
+            )
+        record.status = "ready"
+        record.updated_at = utc_now()
+        await record.save()
+
+        await self.audit_log_service.record(
+            event_type="briefing_marked_ready",
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_entity_type="briefing",
+            target_entity_id=str(record.id),
+            summary_message=f"Marked briefing '{record.title}' ready to send.",
+        )
+        return self._serialize(record)
+
+    async def send(
+        self, briefing_id: str, admin: User, recipient_roles: list[str] | None = None
+    ) -> dict[str, Any]:
+        """Freeze the briefing's content at its final real state and mark it sent. Audit logged.
+
+        Sendable from `draft` (review is optional - a solo user can skip
+        it) or `ready` (after a review pass). `recipient_roles`, when
+        given, must be real, `SUPPORTED_ROLES` roles - not free-text
+        organizational titles (no real "CC"/"SEL" concept exists here).
+        """
+        record = await self._get_or_404(briefing_id)
+        if record.status not in ("draft", "ready"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only a draft or ready briefing can be sent.",
+            )
+
+        resolved_recipients: list[str] = []
+        for role in recipient_roles or []:
+            if not is_supported_role(role):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"message": f"Unknown recipient role: {role}.", "allowed": list(SUPPORTED_ROLES)},
+                )
+            resolved_recipients.append(normalize_role(role))
+
         record.generated_content = await self._generate_content(record.outline)
         record.status = "sent"
+        record.recipient_roles = resolved_recipients
         record.sent_at = utc_now()
         record.updated_at = utc_now()
         await record.save()
@@ -155,7 +229,33 @@ class BriefingService:
             target_entity_type="briefing",
             target_entity_id=str(record.id),
             summary_message=f"Sent briefing '{record.title}'.",
-            metadata_payload={"template_key": record.template_key, "section_count": len(record.outline)},
+            metadata_payload={
+                "template_key": record.template_key,
+                "section_count": len(record.outline),
+                "recipient_roles": resolved_recipients,
+            },
+        )
+        return self._serialize(record)
+
+    async def archive(self, briefing_id: str, admin: User) -> dict[str, Any]:
+        """Archive a sent briefing. Sent-only. Audit logged."""
+        record = await self._get_or_404(briefing_id)
+        if record.status != "sent":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Only a sent briefing can be archived."
+            )
+        record.status = "archived"
+        record.archived_at = utc_now()
+        record.updated_at = utc_now()
+        await record.save()
+
+        await self.audit_log_service.record(
+            event_type="briefing_archived",
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_entity_type="briefing",
+            target_entity_id=str(record.id),
+            summary_message=f"Archived briefing '{record.title}'.",
         )
         return self._serialize(record)
 
@@ -256,10 +356,12 @@ class BriefingService:
             "outline": record.outline,
             "generated_content": record.generated_content,
             "status": record.status,
+            "recipient_roles": record.recipient_roles,
             "created_by": str(record.created_by),
             "created_at": record.created_at.isoformat(),
             "updated_at": record.updated_at.isoformat(),
             "sent_at": record.sent_at.isoformat() if record.sent_at else None,
+            "archived_at": record.archived_at.isoformat() if record.archived_at else None,
         }
 
     def _serialize_summary(self, record: Briefing) -> dict[str, Any]:
@@ -268,7 +370,9 @@ class BriefingService:
             "title": record.title,
             "template_key": record.template_key,
             "status": record.status,
+            "recipient_roles": record.recipient_roles,
             "section_count": len(record.outline),
             "created_at": record.created_at.isoformat(),
             "sent_at": record.sent_at.isoformat() if record.sent_at else None,
+            "archived_at": record.archived_at.isoformat() if record.archived_at else None,
         }

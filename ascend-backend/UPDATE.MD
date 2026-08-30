@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-08-25, later still again (a document that used to only be blank or finished, an outline that stopped padding itself, and a list of who it was actually for)
+
+Three smaller loose ends from the same afternoon's inspection, all closed at once because the person who'd find them useful asked for all three together.
+
+A document in this system had only ever existed in two states: being written, or already sent. Nothing in between — no moment where someone else could look it over before it went out, no way to mark it settled-but-not-yet-sent, no way to file it away once it was done and behind everyone. Gave it the shape a document like this actually needs to move through: written, then handed to someone to look over, then judged ready, then sent, then, eventually, put away. The review step doesn't get forced on anyone — a document can still go straight from written to sent in one motion if that's genuinely all it needs, the same as before. But now there's a real place for it to rest at each stage in between, and a real trace of who moved it and when.
+
+One of the three ready-made outlines for these documents had quietly been shorter than it claimed — offering fewer real sections than what people expected to see, while a companion display elsewhere had been padding the difference with confident-sounding language about a specific financial quarter that no part of this system actually tracks. Rather than pad the outline to match the invented language, pulled in two sections that were already real and already used successfully elsewhere, so the outline is now the right length made entirely of true things — nothing quarter-specific added, because nothing here has ever known what quarter it is.
+
+And the button that sends one of these documents out into the world had never once asked who it was actually going to. Added that — not a free-text scrawl of made-up office names, but the real list of roles this system actually recognizes, checked against that list every time, refusing anything that isn't a real one.
+
+Walked a document through the whole new path by hand to be sure — wrote it, tried to skip straight to "ready" and watched it correctly refuse, sent it for review properly, watched it correctly refuse to be edited once handed off, approved it, tried sending it to a made-up office and watched that get turned away too, sent it to two real roles and watched both names land exactly as given, then filed it away — and afterward wrote a second document and sent it the old, direct way, just to be certain that shortcut hadn't quietly disappeared.
+
 ## 2026-08-25, later still (giving a story back its facts, and retiring a borrowed word)
 
 Two things had been noticed earlier and set aside for later — a screen that told a story about recovery with no real events behind it, and a scale of concern that borrowed a letter already spoken for twice elsewhere in this same system, meaning the same letter now claimed three different things depending on which screen you were reading. Both were worth fixing properly rather than patching around.
