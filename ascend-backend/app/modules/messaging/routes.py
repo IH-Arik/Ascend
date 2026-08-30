@@ -1,8 +1,9 @@
 """Direct messaging routes (DOCX section 10)."""
 
+import base64
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, WebSocket, WebSocketDisconnect, status
 
 from app.api.deps import get_current_user
 from app.common.utils.responses import success_response
@@ -17,6 +18,7 @@ from app.schemas.message import (
     ScanPreviewRequest,
     SendMessageRequest,
 )
+from app.services.file_storage_service import guess_content_type
 from app.services.messaging_service import MessagingService
 
 router = APIRouter()
@@ -51,14 +53,16 @@ async def send_message(
 async def download_message_attachment(
     message_id: str,
     current_user: User = Depends(get_current_user),
-) -> Response:
-    """Download a message's attachment (thread participants only)."""
+) -> dict[str, Any]:
+    """Return a message's attachment as base64-encoded JSON (thread participants only)."""
     content, file_name = await messaging_service.get_attachment(current_user, message_id)
-    return Response(
-        content=content,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
-    )
+    data = {
+        "file_name": file_name,
+        "content_type": guess_content_type(file_name),
+        "file_size_bytes": len(content),
+        "content_base64": base64.b64encode(content).decode("ascii"),
+    }
+    return success_response("Attachment loaded successfully.", data)
 
 
 @router.post("/scan", status_code=status.HTTP_200_OK)

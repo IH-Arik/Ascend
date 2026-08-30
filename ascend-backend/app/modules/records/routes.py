@@ -1,8 +1,9 @@
 """Records module routes (DOCX sections 8.1, 8.2, 8.6, 8.8 - Records home)."""
 
+import base64
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 
 from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
@@ -12,6 +13,7 @@ from app.schemas.medical_record import AccessLevelUpdateRequest, RecordReviewReq
 from app.schemas.reconditioning import ReconditioningPlanUpdate
 from app.schemas.restriction import RestrictionCreate
 from app.schemas.rom_measurement import RomMeasurementCreate
+from app.services.file_storage_service import guess_content_type
 from app.services.fly_away_kit_service import FlyAwayKitService
 from app.services.medical_record_service import MedicalRecordService
 from app.services.reconditioning_service import ReconditioningService
@@ -200,14 +202,16 @@ async def get_medical_record_detail(
 async def download_medical_record_file(
     record_id: str,
     current_user: User = Depends(get_current_user),
-) -> Response:
-    """Download the decrypted file for a medical record."""
+) -> dict[str, Any]:
+    """Return the decrypted file for a medical record as base64-encoded JSON."""
     content, file_name = await medical_record_service.get_file(current_user, record_id)
-    return Response(
-        content=content,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
-    )
+    data = {
+        "file_name": file_name,
+        "content_type": guess_content_type(file_name),
+        "file_size_bytes": len(content),
+        "content_base64": base64.b64encode(content).decode("ascii"),
+    }
+    return success_response("Record file loaded successfully.", data)
 
 
 @router.post("/uploads/{record_id}/review", status_code=status.HTTP_200_OK)

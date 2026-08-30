@@ -129,6 +129,7 @@ class ProfileService:
 
         storage_path = self.file_storage_service.save_file(str(user.id), file_name, content)
         user.avatar_storage_path = storage_path
+        user.avatar_file_name = file_name
         user.avatar_content_type = AVATAR_CONTENT_TYPES[extension]
         user.avatar_uploaded_at = utc_now()
         user.updated_at = utc_now()
@@ -148,6 +149,7 @@ class ProfileService:
         """Remove the user's own profile photo, if any."""
         if user.avatar_storage_path is not None:
             user.avatar_storage_path = None
+            user.avatar_file_name = None
             user.avatar_content_type = None
             user.avatar_uploaded_at = None
             user.updated_at = utc_now()

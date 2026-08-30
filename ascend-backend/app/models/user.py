@@ -21,6 +21,7 @@ class User(Document):
     unit_id: str | None = None
     rank_grade: str | None = None
     avatar_storage_path: str | None = None
+    avatar_file_name: str | None = None
     avatar_content_type: str | None = None
     avatar_uploaded_at: datetime | None = None
     theme_preference: str = "dark"

@@ -29,6 +29,20 @@ from app.core.config import get_settings
 
 BLOCKED_EXTENSIONS = {".exe", ".bat", ".cmd", ".sh", ".dll", ".msi", ".ps1"}
 
+CONTENT_TYPE_BY_EXTENSION = {
+    ".pdf": "application/pdf",
+    ".dcm": "application/dicom",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".heic": "image/heic",
+}
+
+
+def guess_content_type(file_name: str) -> str:
+    """Return a real MIME type for a known extension, else a generic fallback."""
+    return CONTENT_TYPE_BY_EXTENSION.get(Path(file_name).suffix.lower(), "application/octet-stream")
+
 
 def _get_fernet() -> Fernet:
     """Derive a Fernet key from the app's SECRET_KEY (rotates together)."""
