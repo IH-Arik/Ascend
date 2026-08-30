@@ -1,5 +1,11 @@
 # Update Log
 
+## 2026-08-25, later (a photo doesn't need to be opened to be seen)
+
+A small correction, right on the heels of the last one. A photo had just been wrapped up carefully, the way a sensitive document gets wrapped — sealed inside an envelope, needing to be opened and unpacked before anyone could actually look at it. Reasonable, for a document. Wrong, for a photo. A photo isn't something you unwrap — it's something you simply look at, the moment you arrive.
+
+The two other things that had been wrapped the same way stayed wrapped, on purpose — a medical file and a shared attachment both genuinely need that envelope, because not everyone is allowed to see what's inside, and an envelope is exactly how you control that. But a profile photo was never actually guarded that carefully to begin with — anyone already could look at anyone else's, no envelope ever changed that. So unwrapping just this one thing didn't loosen anything real. It just stopped pretending a photo needed the same handling as a file that genuinely has to be handled with care. Now it's simply there — a real address, always the same one for a given person, that shows the picture the instant you point at it, with nothing to unpack first.
+
 ## 2026-08-25 (a warning sign mistaken for a locked door, and a house inspected room by room)
 
 A message arrived that looked, at first glance, exactly like a security failure — a browser refusing to talk to the server, the familiar CORS wording, the kind of error that usually means a real door was left the wrong way. Traced it all the way through instead of guessing, one request at a time — first the polite handshake browsers do before a real request, which came back perfectly correct. Then the real request itself, and that one came back wearing someone else's name. Not this system's response at all — a warning page from the tunnel service standing between the phone and the server, put there for its own free-tier reasons, with none of the real headers on it because the real server had never actually seen the request. A locked door mistaken for the wrong keys. Confirmed it by asking the tunnel to step aside, and the real system answered immediately, correctly, exactly as it should have all along.

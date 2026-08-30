@@ -1,8 +1,6 @@
 """User routes."""
 
-import base64
-
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 
 from app.api.deps import get_current_user
 from app.common.utils.responses import success_response
@@ -96,40 +94,22 @@ async def delete_avatar(current_user: User = Depends(get_current_user)):
     return success_response("Profile photo removed.", data)
 
 
-@router.get("/profile/avatar", summary="Download your own profile photo")
-async def get_own_avatar(current_user: User = Depends(get_current_user)):
-    """Return the signed-in user's profile photo as base64-encoded JSON."""
-    content, content_type = await profile_service.get_avatar_bytes(current_user)
-    data = {
-        "file_name": current_user.avatar_file_name,
-        "content_type": content_type,
-        "file_size_bytes": len(content),
-        "content_base64": base64.b64encode(content).decode("ascii"),
-    }
-    return success_response("Profile photo loaded successfully.", data)
+@router.get("/{user_id}/avatar", summary="Direct image URL for a user's profile photo")
+async def get_user_avatar(user_id: str) -> Response:
+    """Return a user's raw profile photo bytes - a real, direct image URL.
 
-
-@router.get("/{user_id}/avatar", summary="Download another user's profile photo")
-async def get_user_avatar(
-    user_id: str,
-    current_user: User = Depends(get_current_user),
-):
-    """Return another user's profile photo as base64-encoded JSON (e.g. an assigned provider's).
-
-    Any authenticated user may view any other user's avatar - a profile photo
-    isn't sensitive PII the way medical records are, so this deliberately has
-    no team-assignment gate, unlike message attachments or medical record files.
+    Deliberately public (no auth) so it can be dropped straight into an
+    `<img src>`/`Image source={{uri}}` without attaching a bearer token,
+    which browsers and RN's Image component don't do for plain URLs. Safe
+    to leave open: a profile photo isn't sensitive PII the way medical
+    records or message attachments are (both of those stay auth-gated,
+    JSON+base64), and this already had no team-assignment gate even when
+    it required auth. `avatar_url` on `GET /users/profile` is this same
+    path, precomputed - use that instead of building the URL by hand.
     """
-    del current_user
     target = await _get_target_user(user_id)
     content, content_type = await profile_service.get_avatar_bytes(target)
-    data = {
-        "file_name": target.avatar_file_name,
-        "content_type": content_type,
-        "file_size_bytes": len(content),
-        "content_base64": base64.b64encode(content).decode("ascii"),
-    }
-    return success_response("Profile photo loaded successfully.", data)
+    return Response(content=content, media_type=content_type)
 
 
 @router.get("/sign-in-history", summary="Sign-in & activation history")

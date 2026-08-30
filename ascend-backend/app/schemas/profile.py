@@ -19,6 +19,7 @@ class AssignedProvider(BaseModel):
 
     user_id: str
     name: str | None
+    avatar_url: str | None
 
 
 class SignInActivation(BaseModel):
@@ -38,7 +39,7 @@ class ProfileResponse(BaseModel):
     role: str
     unit_id: str | None
     rank_grade: str | None
-    avatar_available: bool
+    avatar_url: str | None
     is_verified: bool
     onboarding_completed: bool
     onboarding_status: str

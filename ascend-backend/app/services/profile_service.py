@@ -53,7 +53,7 @@ class ProfileService:
             role=user.role,
             unit_id=user.unit_id,
             rank_grade=user.rank_grade,
-            avatar_available=user.avatar_storage_path is not None,
+            avatar_url=self._avatar_url(user.id) if user.avatar_storage_path is not None else None,
             is_verified=user.is_verified,
             onboarding_completed=user.onboarding_completed,
             onboarding_status=user.onboarding_status,
@@ -174,6 +174,16 @@ class ProfileService:
         content = self.file_storage_service.read_file(target.avatar_storage_path)
         return content, target.avatar_content_type or "application/octet-stream"
 
+    @staticmethod
+    def _avatar_url(user_id: Any) -> str:
+        """Return the real, public, direct image URL for a user's avatar.
+
+        Path-only (no host) so the client's own base URL is what resolves
+        it - this backend doesn't know its own externally-visible URL
+        (e.g. behind an ngrok tunnel), so it must never hardcode one.
+        """
+        return f"/users/{user_id}/avatar"
+
     async def _get_support_pathways(self, user: User) -> list[str]:
         """Return the support pathways the user opted into during onboarding."""
         answer = await OnboardingAnswer.find_one(
@@ -192,8 +202,17 @@ class ProfileService:
         assigned_scs = None
         assigned_ptim = None
         for pathway in team["pathways"]:
-            if pathway["pathway_key"] == "SCS" and pathway["provider"]:
-                assigned_scs = pathway["provider"]
-            elif pathway["pathway_key"] == "PT/IM" and pathway["provider"]:
-                assigned_ptim = pathway["provider"]
+            provider = pathway["provider"]
+            if provider is None:
+                continue
+            # team_service returns {user_id, name} only - always attach the
+            # URL by user_id rather than an extra lookup to check whether
+            # this specific provider has actually uploaded a photo yet; a
+            # provider with no avatar 404s on this URL like any other user,
+            # same as a broken <img> - client-side fallback handles it.
+            enriched = {**provider, "avatar_url": self._avatar_url(provider["user_id"])}
+            if pathway["pathway_key"] == "SCS":
+                assigned_scs = enriched
+            elif pathway["pathway_key"] == "PT/IM":
+                assigned_ptim = enriched
         return assigned_scs, assigned_ptim
