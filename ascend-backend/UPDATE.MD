@@ -1,5 +1,13 @@
 # Update Log
 
+## 2026-08-25, final (a walk-through that found an old wound nobody had noticed, and a map drawn for whoever comes next)
+
+Asked for one more walk through the whole thing, start to finish, before calling it done — and to leave behind a map of where everything actually lives, for whoever has to connect the real screens to it later.
+
+Walking through it properly meant actually knocking on every door, not just checking the blueprints. Most opened fine. One didn't — refused entry with a message that made it sound like someone had typed a name wrong somewhere. Followed it back instead of shrugging it off, and found something that had nothing to do with anything built today: three old records, filed away weeks before a newer rule came into being, that rule now expecting something those three never had a chance to include. The system wasn't lying about a real problem — it was just describing it badly, the same generic complaint it gives for a different, unrelated kind of mistake. Traced it to the real cause, then quietly gave those three old records the one honest fact they were missing, the same way anyone filling in a form that changed after they'd already submitted theirs would want it handled — not rewritten, just completed. Knocked on every door again afterward. All of them opened.
+
+Then drew the map — every room this part of the house has, what's really in each one, under what name, so nobody has to guess or knock randomly to find out. And before handing the map over, walked it one more time next to the actual rooms, side by side, to make sure the map wasn't describing a house that didn't quite match the one that's really there.
+
 ## 2026-08-25, later still again (a document that used to only be blank or finished, an outline that stopped padding itself, and a list of who it was actually for)
 
 Three smaller loose ends from the same afternoon's inspection, all closed at once because the person who'd find them useful asked for all three together.
