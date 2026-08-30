@@ -21,6 +21,7 @@ from app.models import EmergencyContactConfig
 from app.models import EquipmentGap
 from app.models import IdmtHandoff
 from app.models import LeadershipAnnotation
+from app.models import LeaveRecord
 from app.models import MedicalRecord
 from app.models import MedicalRecordAccessEvent
 from app.models import Message
@@ -33,6 +34,7 @@ from app.models import OrgUnit
 from app.models import PathwayApproval
 from app.models import PendingConfirmation
 from app.models import ProviderCredential
+from app.models import PTSession
 from app.models import ReconditioningEvent
 from app.models import ReconditioningPlan
 from app.models import Recommendation
@@ -109,6 +111,8 @@ async def init_db() -> None:
                 EquipmentGap,
                 UtilizationEvent,
                 CoverageLog,
+                PTSession,
+                LeaveRecord,
                 ScoringConfig,
                 ReportExport,
                 PathwayApproval,

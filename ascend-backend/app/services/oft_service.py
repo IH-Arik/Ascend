@@ -138,12 +138,22 @@ class OFTService:
 
         current_status = latest.status if latest else ("scheduled" if upcoming else "no_record")
         next_scheduled_date = upcoming[0].test_date if upcoming else None
+        score_percentage = None
+        if latest and latest.items_passed is not None and latest.items_total:
+            score_percentage = round(latest.items_passed / latest.items_total * 100, 1)
         return {
             "current_status": current_status,
             "latest_pass_fail": latest.pass_fail if latest else None,
             "latest_test_date": latest.test_date.isoformat() if latest else None,
             "items_passed": latest.items_passed if latest else None,
             "items_total": latest.items_total if latest else None,
+            # Real, added 2026-08-25 (explicit go-ahead) - a genuine
+            # items_passed/items_total percentage, not a fabricated
+            # "/100 score" concept (no such scoring rubric exists for OFT
+            # anywhere in this backend/DOCX - this is exactly and only
+            # what the two real fields already imply, expressed as a %).
+            # Null whenever either real field is null/zero, never guessed.
+            "score_percentage": score_percentage,
             "next_scheduled_date": next_scheduled_date.isoformat() if next_scheduled_date else None,
             "next_scheduled_relative": (
                 f"in {(next_scheduled_date - today).days} days" if next_scheduled_date else None

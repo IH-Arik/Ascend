@@ -32,6 +32,7 @@ class OFTStatusResponse(BaseModel):
     latest_test_date: str | None
     items_passed: int | None
     items_total: int | None
+    score_percentage: float | None = None
     next_scheduled_date: str | None
     next_scheduled_relative: str | None = None
     annual_test_count: int

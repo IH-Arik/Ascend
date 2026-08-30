@@ -41,7 +41,9 @@ from app.schemas.coverage_log import CoverageLogCreate
 from app.schemas.emergency_contact import EmergencyContactUpdate
 from app.schemas.equipment_gap import EquipmentGapCreate, EquipmentGapUpdate
 from app.schemas.idmt_handoff import IdmtHandoffCreateRequest
+from app.schemas.leave_record import LeaveRecordCreate
 from app.schemas.org_unit import OrgUnitCreate
+from app.schemas.pt_session import PTSessionCreate, PTSessionUpdate
 from app.schemas.provider_credential import CredentialCreate
 from app.schemas.question_bank_version import QuestionBankVersionCreate
 from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportUpdate
@@ -59,7 +61,9 @@ from app.services.equipment_gap_service import EquipmentGapService
 from app.services.fly_away_kit_service import FlyAwayKitService
 from app.services.idmt_handoff_service import IdmtHandoffService
 from app.services.leadership_aggregate_service import LeadershipAggregateService
+from app.services.leave_service import LeaveService
 from app.services.oft_service import OFTService
+from app.services.pt_session_service import PTSessionService
 from app.services.org_unit_service import OrgUnitService
 from app.services.provider_dashboard_service import ProviderDashboardService
 from app.services.question_bank_version_service import QuestionBankVersionService
@@ -92,6 +96,8 @@ credential_service = CredentialService()
 equipment_gap_service = EquipmentGapService()
 utilization_service = UtilizationService()
 coverage_service = CoverageService()
+pt_session_service = PTSessionService()
+leave_service = LeaveService()
 scoring_config_service = ScoringConfigService()
 question_bank_version_service = QuestionBankVersionService()
 recommendation_threshold_config_service = RecommendationThresholdConfigService()
@@ -906,6 +912,98 @@ async def list_coverage_logs(
     """Return a provider's coverage-hours log, optionally filtered to one year."""
     data = await coverage_service.list_for_provider(provider_id, year)
     return success_response("Coverage log loaded successfully.", data)
+
+
+@router.post(
+    "/pt-sessions",
+    status_code=status.HTTP_201_CREATED,
+    summary="Schedule a real group training session",
+)
+async def create_pt_session(
+    payload: PTSessionCreate,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Schedule a real group training session (SCS/PT-IM-led)."""
+    data = await pt_session_service.create(current_user, payload)
+    return success_response("Session scheduled successfully.", data)
+
+
+@router.patch("/pt-sessions/{session_id}", summary="Update a session's status or capacity")
+async def update_pt_session(
+    session_id: str,
+    payload: PTSessionUpdate,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Update a real session's status (scheduled/completed/cancelled) or capacity."""
+    data = await pt_session_service.update(session_id, current_user, payload)
+    return success_response("Session updated successfully.", data)
+
+
+@router.get("/pt-sessions/today", summary="Today's real scheduled sessions")
+async def list_pt_sessions_today(
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Return every real session scheduled for today, across all providers."""
+    data = await pt_session_service.list_today()
+    return success_response("Today's sessions loaded successfully.", data)
+
+
+@router.get("/pt-sessions/upcoming", summary="Upcoming real scheduled sessions")
+async def list_pt_sessions_upcoming(
+    days: int = 14,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Return every real session scheduled in the next N days."""
+    data = await pt_session_service.list_upcoming(days)
+    return success_response("Upcoming sessions loaded successfully.", data)
+
+
+# --- Provider leave/TDY/training/medical absence tracking ---
+
+
+@router.post(
+    "/leave",
+    status_code=status.HTTP_201_CREATED,
+    summary="Log a real block of provider leave/TDY/training/medical absence",
+)
+async def create_leave_record(
+    payload: LeaveRecordCreate,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Log a real block of leave/TDY/training/medical absence (self-logged or Admin-logged)."""
+    data = await leave_service.create(current_user, payload)
+    return success_response("Leave logged successfully.", data)
+
+
+@router.delete("/leave/{leave_id}", summary="Delete a logged leave record")
+async def delete_leave_record(
+    leave_id: str,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Delete a real leave record (e.g. entered in error). Audit logged."""
+    await leave_service.delete(leave_id, current_user)
+    return success_response("Leave record deleted.", {})
+
+
+@router.get("/leave/overlap", summary="Real leave overlap - next N days")
+async def get_leave_overlap(
+    days: int = 30,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Return every real leave record in the next N days, plus real overlapping pairs."""
+    data = await leave_service.list_overlap_window(days)
+    return success_response("Leave overlap window loaded successfully.", data)
+
+
+@router.get("/leave/{user_id}", summary="A provider's own real leave history")
+async def get_leave_for_user(
+    user_id: str,
+    days: int = 90,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Return a real provider's own leave history for the last N days."""
+    data = await leave_service.list_for_user(user_id, days)
+    return success_response("Leave history loaded successfully.", data)
 
 
 @router.get("/coverage/reconditioning-load-by-flight", summary="Real per-flight reconditioning/rehab caseload, k-gated")

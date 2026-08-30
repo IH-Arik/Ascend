@@ -12,6 +12,7 @@ from app.models.emergency_contact_config import EmergencyContactConfig
 from app.models.equipment_gap import EquipmentGap
 from app.models.idmt_handoff import IdmtHandoff
 from app.models.leadership_annotation import LeadershipAnnotation
+from app.models.leave_record import LeaveRecord
 from app.models.medical_record import MedicalRecord, MedicalRecordAccessEvent
 from app.models.message import Message
 from app.models.message_thread import MessageThread
@@ -23,6 +24,7 @@ from app.models.org_unit import OrgUnit
 from app.models.pathway_approval import PathwayApproval
 from app.models.pending_confirmation import PendingConfirmation
 from app.models.provider_credential import ProviderCredential
+from app.models.pt_session import PTSession
 from app.models.reconditioning_event import ReconditioningEvent
 from app.models.reconditioning_plan import ReconditioningPlan
 from app.models.recommendation import Recommendation
@@ -56,6 +58,7 @@ __all__ = [
     "EquipmentGap",
     "IdmtHandoff",
     "LeadershipAnnotation",
+    "LeaveRecord",
     "MedicalRecord",
     "MedicalRecordAccessEvent",
     "Message",
@@ -68,6 +71,7 @@ __all__ = [
     "PathwayApproval",
     "PendingConfirmation",
     "ProviderCredential",
+    "PTSession",
     "ReconditioningEvent",
     "ReconditioningPlan",
     "Recommendation",

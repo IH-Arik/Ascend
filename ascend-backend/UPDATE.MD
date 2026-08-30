@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-08-25, SCS (a fitness test finally gets its own honest number, a coach's calendar, and knowing who's away at the same time)
+
+Three more real things asked for by name, one at a time, each with a plain yes or a plain no attached before any of it got built — the same care as before, not skipped just because the pattern was already familiar.
+
+A fitness test result had always been kept exactly as two small honest counts — how many parts passed, how many parts there were — because that's genuinely all that was ever measured. Something elsewhere wanted to see that as a single tidy number out of a hundred, the way a school exam gets graded. There was no real hundred-point scale hiding underneath to reveal — so rather than invent one, did the one honest thing available: turned the same two real counts into their own real percentage. Four passed out of five is genuinely eighty percent. Nothing pretended, nothing added.
+
+A coach's group sessions had never been written down anywhere at all — who was leading what, for which group, starting when. Gave them a real place to live: schedule one, see today's line-up, see what's coming in the next couple of weeks, mark one done or called off. Checked, honestly, that whoever gets listed as running a session is actually someone qualified to run one — not just any name typed into the field.
+
+And nobody's time away had ever been tracked either — leave, a trip elsewhere, training, anything that means someone isn't where their schedule says they should be. Now it can be logged, plainly, for oneself or on someone's behalf. And because the actually useful question is never just "who's away" but "is anyone away at the same time as someone else," worked out the real overlap directly from the real dates — not a made-up warning color, just the literal days two people's absences actually share, laid out plainly enough that anyone reading it can see the real problem for themselves.
+
+Tested all three for real, not just by reading the code back — ran a fitness result through and watched eighty percent come out correctly, and watched a result with nothing to measure correctly come back blank instead of breaking. Scheduled two real sessions, watched today's list correctly show one and hold back the other, watched a cancelled one vanish from today's line-up, and watched a made-up unqualified "coach" get correctly turned away. Logged two people's time away on purpose so their dates would cross, and watched the system correctly notice exactly where and how many days they crossed — then deleted one and watched it correctly disappear from that person's own record.
+
 ## 2026-08-25, very last (a door that slammed shut on the second knock)
 
 A real error landed mid-conversation — not a report of one, the thing itself, the whole raw stack of it. Someone had tried to hand in their daily check-in, and on a second attempt at the exact same moment — a retry, a double-tap, a connection that wasn't sure whether the first try had gone through — the system didn't just say no. It broke, loudly, and showed the asker its own insides doing so.
