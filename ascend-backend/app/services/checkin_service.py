@@ -410,23 +410,42 @@ class CheckinService:
         routing_triggered = item.answer in question.get("routing_trigger", [])
         follow_up_answer = self._normalize_follow_up_answer(question, item, routing_triggered)
 
+        existing = await CheckinAnswer.find_one(
+            CheckinAnswer.user_id == user.id,
+            CheckinAnswer.cadence == CADENCE_DAILY,
+            CheckinAnswer.checkin_date == checkin_date,
+            CheckinAnswer.question_id == question["id"],
+        )
+        fields = {
+            "question_code": question["code"],
+            "question_text": question["question"],
+            "readiness_component": question["readiness_component"],
+            "h2f_component_tag": question["readiness_component"],
+            "selected_value": item.answer,
+            "follow_up_answer": follow_up_answer,
+            "raw_score_1_to_4": raw_score,
+            "numeric_score_100": numeric_score,
+            "scoreable": question["scoreable"],
+            "flag_only": question["flag_only"],
+            "routing_triggered": routing_triggered,
+            "provider_route": question.get("provider_route") if routing_triggered else None,
+        }
+        if existing is not None:
+            # Real upsert, same principle as OnboardingAnswer - a retried or
+            # partially-completed submission overwrites its own prior answer
+            # for that question instead of crashing on the real unique index
+            # (user_id, cadence, checkin_date, question_id).
+            for key, value in fields.items():
+                setattr(existing, key, value)
+            await existing.save()
+            return existing
+
         answer = CheckinAnswer(
             user_id=user.id,
             cadence=CADENCE_DAILY,
             checkin_date=checkin_date,
             question_id=question["id"],
-            question_code=question["code"],
-            question_text=question["question"],
-            readiness_component=question["readiness_component"],
-            h2f_component_tag=question["readiness_component"],
-            selected_value=item.answer,
-            follow_up_answer=follow_up_answer,
-            raw_score_1_to_4=raw_score,
-            numeric_score_100=numeric_score,
-            scoreable=question["scoreable"],
-            flag_only=question["flag_only"],
-            routing_triggered=routing_triggered,
-            provider_route=question.get("provider_route") if routing_triggered else None,
+            **fields,
         )
         await answer.insert()
         return answer
@@ -669,24 +688,42 @@ class CheckinService:
             score = score_ordered_answer(option_index, len(option_labels), scoreable=True)
             routing_triggered = item.answer in question.get("routing_trigger", [])
 
-            answer = CheckinAnswer(
-                user_id=user.id,
-                cadence=cadence,
-                checkin_date=today,
-                question_id=question["id"],
-                question_code=question["code"],
-                question_text=question["question"],
-                readiness_component=question["readiness_component"],
-                h2f_component_tag=question["readiness_component"],
-                selected_value=item.answer,
-                raw_score_1_to_4=score.raw_score_1_to_4,
-                numeric_score_100=score.numeric_score_100,
-                scoreable=True,
-                flag_only=False,
-                routing_triggered=routing_triggered,
-                provider_route=question.get("provider_route") if routing_triggered else None,
+            existing = await CheckinAnswer.find_one(
+                CheckinAnswer.user_id == user.id,
+                CheckinAnswer.cadence == cadence,
+                CheckinAnswer.checkin_date == today,
+                CheckinAnswer.question_id == question["id"],
             )
-            await answer.insert()
+            fields = {
+                "question_code": question["code"],
+                "question_text": question["question"],
+                "readiness_component": question["readiness_component"],
+                "h2f_component_tag": question["readiness_component"],
+                "selected_value": item.answer,
+                "raw_score_1_to_4": score.raw_score_1_to_4,
+                "numeric_score_100": score.numeric_score_100,
+                "scoreable": True,
+                "flag_only": False,
+                "routing_triggered": routing_triggered,
+                "provider_route": question.get("provider_route") if routing_triggered else None,
+            }
+            if existing is not None:
+                # Same real upsert fix as the daily path - a retried or
+                # partially-completed submission overwrites its own prior
+                # answer instead of crashing on the real unique index.
+                for key, value in fields.items():
+                    setattr(existing, key, value)
+                await existing.save()
+                answer = existing
+            else:
+                answer = CheckinAnswer(
+                    user_id=user.id,
+                    cadence=cadence,
+                    checkin_date=today,
+                    question_id=question["id"],
+                    **fields,
+                )
+                await answer.insert()
             saved_answers.append(answer)
 
         _, provider_flags = self._score_and_flag(saved_answers, question_bank)

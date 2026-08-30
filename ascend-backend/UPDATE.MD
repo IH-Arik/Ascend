@@ -1,5 +1,13 @@
 # Update Log
 
+## 2026-08-25, very last (a door that slammed shut on the second knock)
+
+A real error landed mid-conversation — not a report of one, the thing itself, the whole raw stack of it. Someone had tried to hand in their daily check-in, and on a second attempt at the exact same moment — a retry, a double-tap, a connection that wasn't sure whether the first try had gone through — the system didn't just say no. It broke, loudly, and showed the asker its own insides doing so.
+
+Traced it down to something almost sympathetic once seen clearly: the system already knew how to say "you've finished today, nothing more to submit" — that part worked fine. What it never learned was what to do if someone handed in the *same single answer* a second time while the day was still only half-done. It had one rule for a whole day being repeated, and no rule at all for one small piece of it being repeated — so a second copy of the same answer didn't get rejected politely. It just crashed into the first one.
+
+Taught it the missing rule instead of just muting the crash. Now, if an answer already exists for that day, a repeat doesn't collide with it — it simply corrects it, replacing the old one cleanly, the same courtesy this system already extends to the very first set of onboarding answers someone ever gives. Rebuilt the exact accident by hand to be sure — planted a half-finished day, then handed in the whole thing on top of it — and watched it go through cleanly instead of breaking, then checked underneath that nothing had quietly duplicated: one answer in, one answer sitting there afterward, holding the newer of the two, never the old one. And confirmed the original good manners were untouched — try to hand in a day that's genuinely already finished, and it still says so plainly, exactly as it always did.
+
 ## 2026-08-25, final (a walk-through that found an old wound nobody had noticed, and a map drawn for whoever comes next)
 
 Asked for one more walk through the whole thing, start to finish, before calling it done — and to leave behind a map of where everything actually lives, for whoever has to connect the real screens to it later.
