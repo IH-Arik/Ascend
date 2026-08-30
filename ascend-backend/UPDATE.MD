@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-25, SCS re-scan (a calendar learns who's actually coming)
+
+Went back over the SCS work with fresh eyes rather than assuming it was already finished — walked the whole real screen again, side by side with the real system, specifically to check whether the three things just built genuinely answered what was being asked for, not just in spirit but in the exact shape the screen expects.
+
+They mostly did. One small leftover turned out not to be a real gap at all — a colored "Med" warning tag still sitting on the overlap card was traced back to old, invented mock text, and the honest system underneath it had already, on purpose, refused to invent a warning color of its own — so that one just needs the old fake label peeled off, not anything new built underneath it.
+
+The other leftover was real, though. The coach's calendar could say how many people a session was built for, but had no idea how many people had actually said they were coming — so a bar meant to show "most of the seats are taken" had nothing true to measure. Gave the calendar that missing piece: a real, growing list of who's actually signed up for each session, and let the seat count mean something again. Made it behave the way a real seat count should — once every seat is claimed, the next person asking to join is turned away, plainly and correctly, not waved through past a number nobody was actually checking. And someone can be added, then removed, and their old seat becomes real and available again, not just cosmetically empty.
+
+Tested it by actually filling a small session to its exact limit and watching the door close on the next name — then opening one seat back up and watching the very next name in line walk through it cleanly, exactly as it should.
+
 ## 2026-08-25, SCS (a fitness test finally gets its own honest number, a coach's calendar, and knowing who's away at the same time)
 
 Three more real things asked for by name, one at a time, each with a plain yes or a plain no attached before any of it got built — the same care as before, not skipped just because the pattern was already familiar.

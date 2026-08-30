@@ -43,7 +43,7 @@ from app.schemas.equipment_gap import EquipmentGapCreate, EquipmentGapUpdate
 from app.schemas.idmt_handoff import IdmtHandoffCreateRequest
 from app.schemas.leave_record import LeaveRecordCreate
 from app.schemas.org_unit import OrgUnitCreate
-from app.schemas.pt_session import PTSessionCreate, PTSessionUpdate
+from app.schemas.pt_session import PTSessionAttendeeAdd, PTSessionCreate, PTSessionUpdate
 from app.schemas.provider_credential import CredentialCreate
 from app.schemas.question_bank_version import QuestionBankVersionCreate
 from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportUpdate
@@ -937,6 +937,28 @@ async def update_pt_session(
     """Update a real session's status (scheduled/completed/cancelled) or capacity."""
     data = await pt_session_service.update(session_id, current_user, payload)
     return success_response("Session updated successfully.", data)
+
+
+@router.post("/pt-sessions/{session_id}/attendees", status_code=status.HTTP_201_CREATED, summary="Enroll a real attendee")
+async def add_pt_session_attendee(
+    session_id: str,
+    payload: PTSessionAttendeeAdd,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Enroll one real attendee in a session. 400s if already full or already enrolled."""
+    data = await pt_session_service.add_attendee(session_id, current_user, payload.user_id)
+    return success_response("Attendee enrolled successfully.", data)
+
+
+@router.delete("/pt-sessions/{session_id}/attendees/{user_id}", summary="Remove a real attendee")
+async def remove_pt_session_attendee(
+    session_id: str,
+    user_id: str,
+    current_user: User = Depends(require_roles(*PROVIDER_ROLES)),
+):
+    """Remove one real attendee from a session."""
+    data = await pt_session_service.remove_attendee(session_id, current_user, user_id)
+    return success_response("Attendee removed successfully.", data)
 
 
 @router.get("/pt-sessions/today", summary="Today's real scheduled sessions")

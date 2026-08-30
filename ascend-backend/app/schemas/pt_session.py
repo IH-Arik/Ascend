@@ -27,6 +27,12 @@ class PTSessionCreate(BaseModel):
     unit_id: str | None = None
 
 
+class PTSessionAttendeeAdd(BaseModel):
+    """Enroll one real attendee in a session."""
+
+    user_id: str
+
+
 class PTSessionUpdate(BaseModel):
     """Update a session's status or capacity."""
 
@@ -47,5 +53,7 @@ class PTSessionResponse(BaseModel):
     focus: str
     focus_label: str
     capacity: int
+    enrolled_count: int
+    capacity_pct: float
     status: str
     created_at: str

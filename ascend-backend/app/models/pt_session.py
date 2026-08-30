@@ -30,6 +30,10 @@ class PTSession(Document):
     group_label: str
     focus: str
     capacity: int
+    # Real, added 2026-08-25 - the frontend's "Upcoming PT sessions" widget
+    # implied an enrollment/fill percentage against capacity with no real
+    # attendee data anywhere; this is the real list backing it.
+    attendee_user_ids: list[PydanticObjectId] = Field(default_factory=list)
     unit_id: str | None = None
     status: str = "scheduled"
     created_by: PydanticObjectId
