@@ -38,18 +38,27 @@ SECTION_TITLES = {
     "oft_snapshot": "OFT readiness",
     "band_distribution": "Cohort band distribution",
     "risk_recommendations": "Risk & recommendations",
+    "recovery_snapshot": "Recovery program snapshot",
 }
 
-# Real, all sections reference only the 7 real types above - no screenshot
-# language with no real backing ("recovery signal", "FY-quarter
-# comparison", "next quarter") is claimed. `mission_readiness`'s 5 sections
-# match the screenshot's own concrete Outline/Preview example exactly
-# (which is itself explicitly labeled "Mission readiness") - not the
-# Mission Readiness template card's abbreviated blurb text ("OFT pass
-# rate"), which turned out to be non-exhaustive marketing copy that
-# doesn't match the real worked example shown on the same screen.
-# `oft_snapshot` stays a real, valid section type (usable via a custom
-# outline) - it's just not part of any of the 3 default templates.
+# Real, all sections reference only the 8 real types above - no screenshot
+# language with no real backing ("FY-quarter comparison", "next quarter")
+# is claimed. `mission_readiness`'s 5 sections match the screenshot's own
+# concrete Outline/Preview example exactly (which is itself explicitly
+# labeled "Mission readiness") - not the Mission Readiness template card's
+# abbreviated blurb text ("OFT pass rate"), which turned out to be
+# non-exhaustive marketing copy that doesn't match the real worked example
+# shown on the same screen. `oft_snapshot` stays a real, valid section
+# type (usable via a custom outline) - it's just not part of any of the 3
+# default templates.
+#
+# `recovery_snapshot` (added 2026-08-25, real new scope, explicit go-ahead)
+# is the real replacement for what was previously an entirely fabricated
+# "recovery signal" narrative with no data behind it at all - it's now
+# `LeadershipAggregateService.get_recovery_program_summary()`'s real
+# per-flight active-reconditioning caseload, not a before/after cohort
+# comparison (no real data source for that exists anywhere, and none is
+# invented here either).
 BRIEFING_TEMPLATES = {
     "mission_readiness": {
         "title": "Mission Readiness",
@@ -57,7 +66,7 @@ BRIEFING_TEMPLATES = {
     },
     "recovery_rollout": {
         "title": "Recovery Rollout",
-        "sections": ["mission_context", "by_flight", "driver_snapshot", "risk_recommendations"],
+        "sections": ["mission_context", "recovery_snapshot", "by_flight", "risk_recommendations"],
     },
     "quarterly_wing_review": {
         "title": "Quarterly Wing Review",
@@ -207,6 +216,9 @@ class BriefingService:
 
         if section_key == "risk_recommendations":
             return await self._get_risk_section_data()
+
+        if section_key == "recovery_snapshot":
+            return await self.leadership_aggregate_service.get_recovery_program_summary()
 
         return {}
 

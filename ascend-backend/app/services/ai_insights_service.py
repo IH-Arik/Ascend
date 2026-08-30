@@ -198,6 +198,18 @@ class AIInsightsService:
             sev_text = f"Highest open advisory: {max_sev}." if max_sev else "No open threshold advisories this period."
             ann_text = f" Notable: {', '.join(annotations)}." if annotations else ""
             return sev_text + ann_text
+        if section_key == "recovery_snapshot":
+            active = data.get("flights_with_active_recovery", 0)
+            on_track = data.get("on_track_flight_count", 0)
+            total_plans = data.get("total_active_plans", 0)
+            eligible = data.get("flights_meeting_cohort_minimum", 0)
+            if eligible == 0:
+                return "No flights currently meet the cohort minimum for a recovery-program view."
+            return (
+                f"{active} of {eligible} eligible flights have active reconditioning caseload "
+                f"({total_plans} active plans total); {on_track} of those flights have no overdue "
+                f"PT/IM review."
+            )
         return "No data available for this section."
 
     async def get_latest_for_user(

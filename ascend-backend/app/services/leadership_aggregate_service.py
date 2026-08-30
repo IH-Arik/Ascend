@@ -36,7 +36,9 @@ from app.core.roles import ROLE_AIRMAN, ROLE_LEADERSHIP
 from app.core.scoring import build_score_band
 from app.models.ops_snapshot import OpsSnapshot
 from app.models.org_unit import OrgUnit
+from app.models.reconditioning_plan import ReconditioningPlan
 from app.models.user import User
+from app.schemas.reconditioning import PHASE_LABELS, PHASES
 from app.services.role_admin_service import RoleAdminService
 
 # Real, explicitly-stated rule (not DOCX-sourced) - see module docstring.
@@ -45,6 +47,30 @@ HIGH_CONFIDENCE_MULTIPLIER = 2
 # "Monitor" band lower threshold (`app/core/scoring.py`), used as the
 # closest real stand-in for the screenshot's fabricated "Target 75" line.
 APPROXIMATE_TARGET_SCORE = 70.0
+
+
+# Real-but-distinct numeric severity for the risk heatmap's score bands.
+# Deliberately NOT "L"-prefixed: this codebase already has two other real,
+# differently-meaning L-prefixed scales (routing_levels.py's L0-L5 clinical
+# escalation levels, and reconditioning's own L1-L4 injury-severity tier -
+# see app/schemas/reconditioning.py's SEVERITY_LEVELS). A third L-prefixed
+# scale here would recreate the exact collision report_export_service.py
+# already documented avoiding for export risk tiers. "R" for Risk instead.
+RISK_SEVERITY_BY_BAND: dict[str, int] = {
+    "Ready": 1,
+    "Monitor": 2,
+    "Caution": 3,
+    "Action Needed": 4,
+    "High Priority": 5,
+}
+
+
+def risk_severity_label(band: str | None) -> str | None:
+    """Return the real 'R1'-'R5' risk-severity label for a score band, or None if unavailable."""
+    if band is None:
+        return None
+    level = RISK_SEVERITY_BY_BAND.get(band)
+    return f"R{level}" if level is not None else None
 
 
 class LeadershipAggregateService:
@@ -118,9 +144,11 @@ class LeadershipAggregateService:
             suppressed = cohort_size < cohort_k
 
             cells: dict[str, str | None] = {}
+            severity_cells: dict[str, str | None] = {}
             for component in COMPONENT_PRIORITY_ORDER:
                 if suppressed:
                     cells[component] = None
+                    severity_cells[component] = None
                     continue
                 values = [
                     (m.current_component_scores or {}).get(component)
@@ -128,7 +156,9 @@ class LeadershipAggregateService:
                     if (m.current_component_scores or {}).get(component) is not None
                 ]
                 average = round(sum(values) / len(values), 2) if values else None
-                cells[component] = build_score_band(average) if average is not None else None
+                band = build_score_band(average) if average is not None else None
+                cells[component] = band
+                severity_cells[component] = risk_severity_label(band)
 
             rows.append(
                 {
@@ -137,11 +167,75 @@ class LeadershipAggregateService:
                     "cohort_size": cohort_size,
                     "suppressed": suppressed,
                     "driver_bands": cells,
+                    # Real, non-collision severity view of the same cells (R1
+                    # lowest concern - R5 highest) - see RISK_SEVERITY_BY_BAND.
+                    "driver_severity": severity_cells,
                 }
             )
 
         rows.sort(key=lambda item: item["flight_name"])
         return {"min_cohort_size": cohort_k, "flights": rows}
+
+    async def get_recovery_program_summary(self) -> dict[str, Any]:
+        """Real per-flight active-reconditioning caseload, k-gated - the "Recovery program" view.
+
+        Not DOCX-sourced (a Figma Leadership screen showed a "Recovery
+        program" stat card and a "Recovery Rollout" briefing template with
+        no real backing at all - no before/after cohort comparison, no
+        adherence percentage, no "control" group exists anywhere in this
+        system, and none is invented here either). What genuinely exists
+        is `ReconditioningPlan` - this surfaces the same real per-flight
+        active-caseload shape `CoverageService.get_reconditioning_load_by_flight`
+        already uses for SCS, but under Leadership's own configured
+        cohort-k (not SCS's), plus a real phase distribution and a real,
+        plainly-defined "on track" signal (no plan in that flight has an
+        overdue `next_review_date`) - honest, not a fabricated adherence
+        score.
+        """
+        cohort_k = await self._get_cohort_k()
+        flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
+        active_plans = await ReconditioningPlan.find(ReconditioningPlan.phase != "completed").to_list()
+        plans_by_user_id = {p.user_id: p for p in active_plans}
+
+        today = date.today()
+        rows: list[dict[str, Any]] = []
+        for flight in flights:
+            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            cohort_size = len(members)
+            if cohort_size < cohort_k:
+                continue
+
+            flight_plans = [plans_by_user_id[m.id] for m in members if m.id in plans_by_user_id]
+            phase_distribution = {phase: 0 for phase in PHASES if phase != "completed"}
+            for plan in flight_plans:
+                if plan.phase in phase_distribution:
+                    phase_distribution[plan.phase] += 1
+            overdue_review_count = sum(
+                1 for plan in flight_plans if plan.next_review_date is not None and plan.next_review_date < today
+            )
+
+            rows.append(
+                {
+                    "flight_id": str(flight.id),
+                    "flight_name": flight.name,
+                    "cohort_size": cohort_size,
+                    "active_plan_count": len(flight_plans),
+                    "phase_distribution": {PHASE_LABELS[phase]: count for phase, count in phase_distribution.items()},
+                    "overdue_review_count": overdue_review_count,
+                    "on_track": overdue_review_count == 0,
+                }
+            )
+
+        rows.sort(key=lambda item: item["flight_name"])
+        return {
+            "min_cohort_size": cohort_k,
+            "total_flights": len(flights),
+            "flights_meeting_cohort_minimum": len(rows),
+            "flights_with_active_recovery": sum(1 for r in rows if r["active_plan_count"] > 0),
+            "on_track_flight_count": sum(1 for r in rows if r["on_track"] and r["active_plan_count"] > 0),
+            "total_active_plans": len(active_plans),
+            "flights": rows,
+        }
 
     async def get_monthly_trend(self, months: int = 12, unit_id: str | None = None) -> dict[str, Any]:
         """Real monthly cohort OPS/component trend, k-gated per month.
@@ -393,6 +487,7 @@ class LeadershipAggregateService:
         monthly_trend = await self.get_monthly_trend(months=12)
         flight_comparison = await self.get_flight_comparison()
         risk_heatmap = await self.get_risk_heatmap()
+        recovery_program_summary = await self.get_recovery_program_summary()
 
         latest_month = monthly_trend["months"][-1] if monthly_trend["months"] else None
         return {
@@ -422,6 +517,7 @@ class LeadershipAggregateService:
             ],
             "flight_comparison": flight_comparison,
             "risk_heatmap": risk_heatmap,
+            "recovery_program_summary": recovery_program_summary,
             "min_cohort_size": monthly_trend["min_cohort_size"],
         }
 

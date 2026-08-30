@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-08-25, later still (giving a story back its facts, and retiring a borrowed word)
+
+Two things had been noticed earlier and set aside for later — a screen that told a story about recovery with no real events behind it, and a scale of concern that borrowed a letter already spoken for twice elsewhere in this same system, meaning the same letter now claimed three different things depending on which screen you were reading. Both were worth fixing properly rather than patching around.
+
+For the first: rather than invent the missing events, went looking for what was already real and simply not yet gathered up. It turned out the pieces were all there — every flight already had a real, current count of who was actively working through recovery, and a real record of who was overdue for a check-in. Assembled those into an honest picture: how many are recovering right now, how many of those are current on their reviews, and — because it was already true and just needed saying — which flights are genuinely keeping pace and which aren't. Nothing invented. Just the truth that already existed, finally collected into one place, and handed to the part of the system that writes real sentences about it — which now writes a genuinely different sentence depending on what's actually happening in each flight, instead of the same hollow phrase every time.
+
+For the second: gave concern its own honest vocabulary instead of reusing someone else's. The old label meant something else already, twice — a medical routing signal in one place, an injury-severity tier in another — so wearing that same letter a third time here would have meant three different things quietly sharing one costume. Swapped it for a plainly different one, tied to the exact same real underlying judgment as before, just no longer pretending to be a word it never was.
+
+Tested both against real, freshly made-up-but-genuine flights and people — planted the exact conditions by hand, watched the numbers come back matching precisely what was planted, and read the actual sentence the system wrote about it afterward. It named the right flight, by name, and said the right thing about it.
+
 ## 2026-08-25, later (a photo doesn't need to be opened to be seen)
 
 A small correction, right on the heels of the last one. A photo had just been wrapped up carefully, the way a sensitive document gets wrapped — sealed inside an envelope, needing to be opened and unpacked before anyone could actually look at it. Reasonable, for a document. Wrong, for a photo. A photo isn't something you unwrap — it's something you simply look at, the moment you arrive.
