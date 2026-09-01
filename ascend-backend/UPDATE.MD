@@ -1,5 +1,23 @@
 # Update Log
 
+## 2026-09-01, a word that stopped meaning anything, and nobody noticed until someone else started listening
+
+Someone asked for a plain explanation first — how a day's check-in, a week's, and a month's all fold together into one number. That part was easy to answer honestly: today always wins if it exists; failing that, this week's answer if it's not too old; failing that, this month's; failing all three, the score a person walked in with, quietly marked as aging.
+
+Then came the harder question. A daily check-in had gone in fine. The week and the month after it hadn't. Something was refusing them, somewhere.
+
+The refusal wasn't where it seemed to be. Asked the real system directly, in the order a real person would use it — day, then week, then month — and it accepted every one of them without complaint. Whatever was blocking the door wasn't the door itself.
+
+It was a sign hung beside the door years ago, back when the door didn't open yet. The sign said LOCKED, and it never learned to say anything else — not because anyone decided it should stay that way forever, but because the day the door actually started opening, nobody went back and told the sign. It had been telling the truth once. Nobody noticed when it stopped.
+
+For a long time that didn't matter, because nothing was reading the sign — the door just opened when tried. But someone had, since, built a hand that reaches for the door only when the sign says it's safe to. A careful hand, doing exactly what a careful hand should do. And a sign that never changes will fool even the most careful hand, every single time.
+
+Asked before touching it: when should this sign actually say the door is shut? The answer chosen was the same one already used for a neighboring door that had never worn a broken sign at all — shut only once someone's actually walked through it this week, open every other day, no invented curfew pretending otherwise.
+
+Wrote the sign to read the truth instead of a memory. Checked it twice — for someone who hadn't been through yet, and for someone who already had — and now it says what's actually true both times. Even caught, on the way, a small ghost of the old door still standing at its post after being told to leave, quietly answering questions with the stale truth for a while longer before finally being made to stand down.
+
+One more sign, a little further down the same hallway, was found leaning the wrong way entirely — pointing at how many days until this month's door *closes* and calling it how many days until it *opens*, which meant it read "open" only on the one day a month everything was already ending. That one wasn't this hallway's to fix. Said so plainly, and left it standing exactly as found for whoever built that door to notice.
+
 ## 2026-08-25, PT-IM deep re-scan (a second look, on purpose, before calling it finished)
 
 Went back over the same ground once more, deliberately, rather than trusting that "done" from a few hours ago was still the whole truth. It mostly was — but a second, more patient look found four more real things, sitting quietly in a page that had already been checked once.

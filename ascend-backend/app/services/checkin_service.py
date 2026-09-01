@@ -127,18 +127,33 @@ class CheckinService:
     async def get_weekly_gate(self, user: User) -> dict[str, Any]:
         """Return the weekly check-in cadence gate status.
 
-        Informational only - weekly check-in submission itself is not built
-        yet (only daily/Day 0 is), so this reports cadence timing without
-        implying a submit flow exists.
+        `locked` mirrors the monthly cadence's own real rule: open for the
+        whole current period, locked only once this period's weekly
+        check-in has already been submitted. There is no separate hard
+        time-lock - the real submit endpoint (`submit_periodic_checkin`)
+        already accepts a weekly submission on any day of the current
+        period, so this field must agree with what submission actually
+        allows instead of reporting a fixed True.
         """
         now = datetime.now(timezone.utc)
+        today = now.date()
         next_open = next_weekly_open(now)
         days_until_open = max((next_open.date() - now.date()).days, 0)
         if days_until_open <= 2:
             await self.remind_weekly_checkin_opening(user, next_open.date())
+
+        question_bank = PERIODIC_QUESTION_BANKS[CADENCE_WEEKLY]()
+        period_start, _ = self._periodic_window(user, CADENCE_WEEKLY, today)
+        period_answers = await CheckinAnswer.find(
+            CheckinAnswer.user_id == user.id,
+            CheckinAnswer.cadence == CADENCE_WEEKLY,
+            CheckinAnswer.checkin_date >= period_start,
+        ).to_list()
+        locked = len(period_answers) >= len(question_bank)
+
         payload = WeeklyGateResponse(
-            locked=True,
-            today=now.date().isoformat(),
+            locked=locked,
+            today=today.isoformat(),
             days_until_open=days_until_open,
             next_open_at=next_open.isoformat(),
             cadence_start_date=self._format_date(user.weekly_cadence_start_date),
