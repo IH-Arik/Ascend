@@ -8,8 +8,10 @@ from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
 from app.core.roles import ADMIN_ROLES, ROLE_CHAPLAIN, ROLE_MENTAL_PERFORMANCE, ROLE_NUTRITIONIST, ROLE_PTIM, ROLE_SCS
 from app.models.user import User
+from app.schemas.support import ReflectionCadenceRequest
 from app.schemas.support import SupportRequestCreate
 from app.schemas.support import TogglePathwayRequest
+from app.schemas.support import WitnessedOptInRequest
 from app.schemas.support import UpdateReasonCategoryRequest
 from app.schemas.support import UpdateRequestStatusRequest
 from app.services.support_service import SupportService
@@ -125,3 +127,26 @@ async def toggle_team_pathway(
     """Enable or disable an optional support pathway (audit logged)."""
     data = await team_service.toggle_pathway(current_user, pathway_key, payload.enabled)
     return success_response("Pathway status updated successfully.", data)
+
+
+@router.post("/team/{pathway_key}/{user_id}/witnessed-opt-in", status_code=status.HTTP_200_OK)
+async def record_witnessed_opt_in(
+    pathway_key: str,
+    user_id: str,
+    payload: WitnessedOptInRequest,
+    current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
+) -> dict[str, Any]:
+    """A specialist records a real, witnessed opt-in for an operator (in-person/form/casual contact)."""
+    data = await team_service.record_witnessed_opt_in(current_user, user_id, pathway_key, payload.method)
+    return success_response("Witnessed opt-in recorded successfully.", data)
+
+
+@router.patch("/team/chaplain/{user_id}/reflection-cadence", status_code=status.HTTP_200_OK)
+async def set_reflection_cadence(
+    user_id: str,
+    payload: ReflectionCadenceRequest,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_CHAPLAIN)),
+) -> dict[str, Any]:
+    """A Chaplain sets their own real reflection-pacing preference for one operator."""
+    data = await team_service.set_reflection_cadence(current_user, user_id, payload.cadence)
+    return success_response("Reflection cadence updated successfully.", data)

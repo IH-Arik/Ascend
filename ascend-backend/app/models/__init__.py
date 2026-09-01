@@ -29,6 +29,7 @@ from app.models.pt_session import PTSession
 from app.models.reconditioning_event import ReconditioningEvent
 from app.models.reconditioning_plan import ReconditioningPlan
 from app.models.recommendation import Recommendation
+from app.models.reflection import Reflection
 from app.models.restriction import Restriction
 from app.models.rom_measurement import RomMeasurement
 from app.models.recommendation_threshold_config import RecommendationThresholdConfig
@@ -77,6 +78,7 @@ __all__ = [
     "ReconditioningEvent",
     "ReconditioningPlan",
     "Recommendation",
+    "Reflection",
     "RecommendationThresholdConfig",
     "ReportExport",
     "Restriction",

@@ -1,5 +1,19 @@
 # Update Log
 
+## 2026-09-01, a third room, held to the strictest rule of the three, and a page that finally belongs to the person who wrote it
+
+A third wing of the same building, and this one had always been told, in writing, to be the most careful of the three — never to become a private record kept about someone, never to touch anything medical without a separate, specific permission, and to let a person's own willingness be the only reason anyone here ever knows anything about them at all. Carried that instruction into every choice made in this room.
+
+Its calendar and its notes turned out to already be shared property — built for a neighboring wing only hours before, wide enough to fit this one too without a single new wall.
+
+But one page here had never really belonged to anyone. A quiet, private page where a person could write down their own reflections — not notes taken about them, but their own words, in their own hand — had a shape on the wall but nothing to hold what was written. Gave it a real page at last, one that only opens for someone who has actually said yes to being here, and one that closes itself the instant that yes is taken back — not by shredding what was written, only by putting it somewhere no one but its author can reach anymore.
+
+A ledger of who had said yes, and how, had real dates but invented witnesses — a method and a name that were never actually recorded by anyone. Gave the ledger a true second column: a person's own tap of a switch counts as their own word for it, needing no witness; anything recorded on someone's behalf now needs a real person actually standing there to record it, and their real name is what gets written down, not a placeholder.
+
+And a pace — how often this particular person might be expected to write or be reached — had been shown as if already chosen, when nothing had ever chosen it. Gave that a real place to be set, kept separate on purpose from the building's own real rhythm of daily and weekly and monthly check-ins, because this one is a much smaller, gentler thing: one person's own chosen tempo, not a schedule the whole building runs on.
+
+Proved the strictest room could still hold real things properly. Tried to write on the private page before ever saying yes, and was correctly stopped. Said yes, wrote a real page, and had it read back exactly as written. Said no again — and the very next attempt to read that same page, from the very same person who could read it a moment before, was correctly refused, even though the page itself was still sitting there entirely intact underneath. Had someone properly record a real, witnessed yes on another's behalf, and watched their own real name appear as the one who stood there. Tried, once, to claim on their behalf a kind of yes that only the person themselves is allowed to give, and was correctly refused that too. And set a pace, gently, and watched it hold.
+
 ## 2026-09-01, how long someone actually stood there, without erasing the moment they arrived
 
 One column in a visitor log had always been left blank in spirit even while showing a number — how long each visit had lasted. Everything else in that log was real: who came, when, what they touched. Only the length of the stay had nothing real behind it.

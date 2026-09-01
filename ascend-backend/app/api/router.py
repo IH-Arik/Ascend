@@ -16,6 +16,7 @@ from app.modules.oft.routes import router as oft_router
 from app.modules.onboarding.routes import router as onboarding_router
 from app.modules.performance_summaries.routes import router as performance_summaries_router
 from app.modules.records.routes import router as records_router
+from app.modules.reflections.routes import router as reflections_router
 from app.modules.recommendations.routes import router as recommendations_router
 from app.modules.roles.routes import router as roles_router
 from app.modules.specialist_notes.routes import router as specialist_notes_router
@@ -45,3 +46,4 @@ api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(records_router, prefix="/records", tags=["records"])
 api_router.include_router(specialist_notes_router, prefix="/specialist-notes", tags=["specialist-notes"])
 api_router.include_router(performance_summaries_router, prefix="/performance-summaries", tags=["performance-summaries"])
+api_router.include_router(reflections_router, prefix="/reflections", tags=["reflections"])

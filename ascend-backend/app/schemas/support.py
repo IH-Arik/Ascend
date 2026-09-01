@@ -109,3 +109,21 @@ class TogglePathwayRequest(BaseModel):
     """Enable or disable an optional support pathway."""
 
     enabled: bool
+
+
+# Real, matches TeamAssignment.OPT_IN_METHODS (excluding self-service, which
+# stays the operator's own toggle) and REFLECTION_CADENCES, added 2026-09-01.
+WITNESSED_OPT_IN_METHODS = ("secure_form_signed", "in_person_verbal", "casual_contact_on_request")
+REFLECTION_CADENCE_VALUES = ("weekly", "bi_weekly", "monthly", "paused")
+
+
+class WitnessedOptInRequest(BaseModel):
+    """A specialist records a real, witnessed opt-in for an operator."""
+
+    method: str = Field(pattern="^(" + "|".join(WITNESSED_OPT_IN_METHODS) + ")$")
+
+
+class ReflectionCadenceRequest(BaseModel):
+    """A Chaplain sets their own reflection-pacing preference for an operator."""
+
+    cadence: str = Field(pattern="^(" + "|".join(REFLECTION_CADENCE_VALUES) + ")$")

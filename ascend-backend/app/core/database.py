@@ -38,6 +38,7 @@ from app.models import SpecialistSession, PTSession
 from app.models import ReconditioningEvent
 from app.models import ReconditioningPlan
 from app.models import Recommendation
+from app.models import Reflection
 from app.models import Restriction
 from app.models import RomMeasurement
 from app.models import RecommendationThresholdConfig
@@ -94,6 +95,7 @@ async def init_db() -> None:
                 CheckinAnswer,
                 OpsSnapshot,
                 Recommendation,
+                Reflection,
                 SupportRequest,
                 Notification,
                 OFTRecord,

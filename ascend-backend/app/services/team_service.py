@@ -25,7 +25,14 @@ from app.core.security import utc_now
 from app.core.support_pathways import get_support_pathway, get_support_pathways
 from app.models.recommendation import Recommendation
 from app.models.support_request import SupportRequest
-from app.models.team_assignment import STATUS_DISABLED, STATUS_ENABLED, STATUS_LOCKED_ON, TeamAssignment
+from app.models.team_assignment import (
+    OPT_IN_METHODS,
+    REFLECTION_CADENCES,
+    STATUS_DISABLED,
+    STATUS_ENABLED,
+    STATUS_LOCKED_ON,
+    TeamAssignment,
+)
 from app.models.user import User
 from app.services.audit_log_service import AuditLogService
 from app.services.support_service import SupportService
@@ -51,7 +58,7 @@ class TeamService:
             latest_request = await self._get_latest_support_request(user, pathway["key"])
             assigned_action = await self._get_matching_active_action(user, pathway["key"])
             pathways.append(
-                self._serialize_pathway_status(
+                await self._serialize_pathway_status(
                     pathway, assignment, provider, latest_request, assigned_action
                 )
             )
@@ -71,6 +78,9 @@ class TeamService:
         assignment = await self._get_or_create_assignment(user, pathway)
         previous_status = assignment.status
         assignment.status = STATUS_ENABLED if enabled else STATUS_DISABLED
+        if enabled:
+            assignment.opt_in_method = "app_self_service"
+            assignment.witnessed_by_id = None
         assignment.updated_at = utc_now()
         await assignment.save()
 
@@ -93,9 +103,88 @@ class TeamService:
         )
         latest_request = await self._get_latest_support_request(user, pathway_key)
         assigned_action = await self._get_matching_active_action(user, pathway_key)
-        return self._serialize_pathway_status(
+        return await self._serialize_pathway_status(
             pathway, assignment, provider, latest_request, assigned_action
         )
+
+    async def record_witnessed_opt_in(
+        self, specialist: User, user_id: str, pathway_key: str, method: str
+    ) -> dict[str, Any]:
+        """A specialist records a real, witnessed opt-in for an operator (not a self-service toggle).
+
+        Real, added 2026-09-01 - matches the Chaplain dashboard's "Opt-in
+        confirmation audit" Method/Witness columns. `method` must be one of
+        the 3 non-self-service `OPT_IN_METHODS` - self-service stays the
+        operator's own `toggle_pathway` call, never recorded this way.
+        """
+        if method not in OPT_IN_METHODS or method == "app_self_service":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "Invalid witnessed opt-in method.", "allowed": [m for m in OPT_IN_METHODS if m != "app_self_service"]},
+            )
+        pathway = get_support_pathway(pathway_key)
+        if pathway is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown pathway.")
+        target = await User.get(user_id)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+        assignment = await self._get_or_create_assignment(target, pathway)
+        assignment.status = STATUS_ENABLED
+        assignment.opt_in_method = method
+        assignment.witnessed_by_id = specialist.id
+        assignment.updated_at = utc_now()
+        await assignment.save()
+
+        await self.audit_log_service.record(
+            event_type="support_pathway_witnessed_opt_in",
+            actor_id=specialist.id,
+            actor_role=specialist.role,
+            target_entity_type="team_assignment",
+            target_entity_id=str(assignment.id),
+            summary_message=f"Recorded a witnessed opt-in to {pathway['label']} for {target.email} ({method}).",
+        )
+
+        provider = await User.get(assignment.provider_user_id) if assignment.provider_user_id else None
+        latest_request = await self._get_latest_support_request(target, pathway_key)
+        assigned_action = await self._get_matching_active_action(target, pathway_key)
+        return await self._serialize_pathway_status(pathway, assignment, provider, latest_request, assigned_action)
+
+    async def set_reflection_cadence(self, specialist: User, user_id: str, cadence: str) -> dict[str, Any]:
+        """A specialist (Chaplain) sets their own pacing preference for one operator.
+
+        Real, added 2026-09-01. Not the real OPS check-in cadence
+        (`app/core/cadence.py`) - a separate, Chaplain-facing preference for
+        how often they expect a reflection from this specific person.
+        """
+        if cadence not in REFLECTION_CADENCES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "Invalid reflection cadence.", "allowed": list(REFLECTION_CADENCES)},
+            )
+        pathway = get_support_pathway("Chaplain")
+        target = await User.get(user_id)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+        assignment = await self._get_or_create_assignment(target, pathway)
+        assignment.reflection_cadence = cadence
+        assignment.updated_at = utc_now()
+        await assignment.save()
+
+        await self.audit_log_service.record(
+            event_type="reflection_cadence_set",
+            actor_id=specialist.id,
+            actor_role=specialist.role,
+            target_entity_type="team_assignment",
+            target_entity_id=str(assignment.id),
+            summary_message=f"Set reflection cadence to '{cadence}' for {target.email}.",
+        )
+
+        provider = await User.get(assignment.provider_user_id) if assignment.provider_user_id else None
+        latest_request = await self._get_latest_support_request(target, "Chaplain")
+        assigned_action = await self._get_matching_active_action(target, "Chaplain")
+        return await self._serialize_pathway_status(pathway, assignment, provider, latest_request, assigned_action)
 
     async def _get_or_create_assignment(self, user: User, pathway: dict[str, Any]) -> TeamAssignment:
         """Return the existing assignment for a pathway, creating one if needed."""
@@ -167,7 +256,7 @@ class TeamService:
             return None
         return max(records, key=lambda item: item.created_at)
 
-    def _serialize_pathway_status(
+    async def _serialize_pathway_status(
         self,
         pathway: dict[str, Any],
         assignment: TeamAssignment,
@@ -176,6 +265,7 @@ class TeamService:
         assigned_action: Recommendation | None,
     ) -> dict[str, Any]:
         """Build the transport-safe pathway status entry."""
+        witnessed_by = await User.get(assignment.witnessed_by_id) if assignment.witnessed_by_id else None
         return {
             "pathway_key": pathway["key"],
             "label": pathway["label"],
@@ -183,6 +273,9 @@ class TeamService:
             "description": pathway["description"],
             "always_available": pathway["always_available"],
             "status": assignment.status,
+            "opt_in_method": assignment.opt_in_method,
+            "witnessed_by_name": witnessed_by.full_name if witnessed_by else None,
+            "reflection_cadence": assignment.reflection_cadence,
             "messaging_available": pathway["messaging_v1_supported"]
             and assignment.status in (STATUS_LOCKED_ON, STATUS_ENABLED),
             "provider": (

@@ -23,6 +23,21 @@ STATUS_LOCKED_ON = "locked_on"
 STATUS_ENABLED = "enabled"
 STATUS_DISABLED = "disabled"
 
+# Real, added 2026-09-01 - the Chaplain dashboard's "Opt-in confirmation
+# audit" showed a real timestamp+status (already backed by this model)
+# plus a "Method"/"Witness" pair with nothing behind either. A self-service
+# app toggle (`toggle_pathway`) is real and always "app_self_service"; the
+# other 3 require a specialist to actually record a real witnessed
+# interaction (`record_witnessed_opt_in`).
+OPT_IN_METHODS = ("app_self_service", "secure_form_signed", "in_person_verbal", "casual_contact_on_request")
+# Real, added 2026-09-01 - the same dashboard's caseload table showed a
+# per-airman "Reflection cadence" (Weekly/Bi-weekly/Monthly/Paused) with no
+# real field behind it. Distinct from the real daily/weekly/monthly OPS
+# check-in cadence - this is the Chaplain's own pacing preference for how
+# often they expect a reflection from this specific person, not a system
+# cadence.
+REFLECTION_CADENCES = ("weekly", "bi_weekly", "monthly", "paused")
+
 
 class TeamAssignment(Document):
     """A single pathway's assignment/enable-state for one operator."""
@@ -31,6 +46,9 @@ class TeamAssignment(Document):
     pathway_key: str
     provider_user_id: PydanticObjectId | None = None
     status: str = "disabled"
+    opt_in_method: str | None = None
+    witnessed_by_id: PydanticObjectId | None = None
+    reflection_cadence: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
