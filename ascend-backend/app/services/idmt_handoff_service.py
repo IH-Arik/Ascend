@@ -92,6 +92,35 @@ class IdmtHandoffService:
             "status": handoff.status,
         }
 
+    async def prepare_batch(
+        self, preparer: User, target_user_ids: list[str], export_type: str, export_format: str
+    ) -> dict[str, Any]:
+        """Prepare a real handoff for each user in a cohort - the "cohort scope" a Figma modal implied.
+
+        Not a new handoff shape - DOCX Section 8.5's data dictionary
+        defines `IdmtHandoff` per-user (`user_id`, singular), and that
+        stays true here: this creates one real, individually-approved
+        `IdmtHandoff` per target user via the existing `prepare()`
+        (same two-person-rule confirmation, same summary-only content,
+        same IDMT-fixed recipient_role) - never a single record spanning
+        multiple users, and never a shortcut around approval for any of
+        them. A cohort "handoff" is real multiplicity of real single-user
+        handoffs, not a new data shape.
+        """
+        if not target_user_ids:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide at least one user_id.")
+        if len(target_user_ids) > 50:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="A single batch is capped at 50 users."
+            )
+
+        results = []
+        for target_user_id in target_user_ids:
+            result = await self.prepare(preparer, target_user_id, export_type, export_format)
+            results.append({"user_id": target_user_id, **result})
+
+        return {"requested_count": len(target_user_ids), "handoffs": results}
+
     async def transmit(self, actor: User, handoff_id: str) -> dict[str, Any]:
         """Mark an approved handoff transmitted - a real, distinct state from 'approved'."""
         handoff = await self._get(handoff_id)

@@ -1,5 +1,19 @@
 # Update Log
 
+## 2026-08-25, PT-IM (a rate that finally means something, a real refusal held to on principle, and one request sent to many people without pretending it was ever one)
+
+Four things asked about, one by one. Two got built. One got a plain no, for a reason that wasn't mine to override. One got left exactly as it already honestly was.
+
+A quarterly injury count had a real number sitting behind it, but the screen wanted to show it as a rate — "so many per hundred" — and there was no real hundred to divide by, no real population size this system had ever actually counted against. Rather than borrow a fake denominator from nowhere, grouped the same real people by their real unit and used their real unit's own real size as the base. A rate that means something now, because both halves of it are real.
+
+Then came the one that mattered most today, and it got a plain, considered no — not because it seemed hard, but because it would have meant building something the requirements document itself explicitly forbids. It says, in its own words, that raw medical material must never be handed to that particular recipient without an approved reason attached — and the record shape here already goes further than just saying so, it structurally cannot hold a raw file at all, only a summary. Read that back plainly before deciding, and the answer stayed no. Not my call to make quietly either way — better to say it out loud and let the real rule stand.
+
+One more piece, further down the same page, had shown a screen with a mock full medical chart — immunizations, medications, a whole invented record — none of which this system has ever actually kept, because it was never asked to be that kind of record-keeper. Left it alone. The honest six-part summary that already exists says what can actually be said, truthfully, and that was judged enough as it stood.
+
+And the last one: a request meant for several people at once had never had a way to actually go to more than one. Gave it that, carefully — not by inventing a new kind of request that covers many people loosely, but by genuinely sending the same real, individually-approved request to each person on the list, one full copy per person, each one still needing its own real sign-off before anything moves. Many real requests standing in for one shared intention, never one soft request pretending to cover a crowd.
+
+Proved both real ones by hand before calling them done — built a real unit with real people and two real reported injuries in it, and watched the resulting rate come back exactly right, down to the decimal. Then sent one real request out to three real people at once and went and checked, separately, that all three had genuinely landed as their own distinct, still-pending items — not one item wearing three names.
+
 ## 2026-08-25, SCS re-scan (a calendar learns who's actually coming)
 
 Went back over the SCS work with fresh eyes rather than assuming it was already finished — walked the whole real screen again, side by side with the real system, specifically to check whether the three things just built genuinely answered what was being asked for, not just in spirit but in the exact shape the screen expects.

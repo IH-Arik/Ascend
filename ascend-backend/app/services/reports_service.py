@@ -19,6 +19,7 @@ from app.models.assessment import Assessment
 from app.models.equipment_gap import EquipmentGap
 from app.models.idmt_handoff import IdmtHandoff
 from app.models.medical_record import MedicalRecord, MedicalRecordAccessEvent
+from app.models.org_unit import OrgUnit
 from app.models.performance_summary import PerformanceSummary
 from app.models.reconditioning_plan import ReconditioningPlan
 from app.models.report_export import ReportExport
@@ -26,6 +27,7 @@ from app.models.user import User
 from app.models.workout_log import WorkoutLog
 from app.services.coverage_service import CoverageService
 from app.services.leadership_aggregate_service import LeadershipAggregateService
+from app.services.role_admin_service import RoleAdminService
 from app.services.utilization_service import UtilizationService
 
 PRS_TARGET_HOURS = {ROLE_SCS: 2080.0, ROLE_PTIM: 512.0}
@@ -39,6 +41,7 @@ class ReportsService:
         self.coverage_service = CoverageService()
         self.utilization_service = UtilizationService()
         self.leadership_aggregate_service = LeadershipAggregateService()
+        self.role_admin_service = RoleAdminService()
 
     async def get_required_contract_reports_status(self) -> dict[str, Any]:
         """The real 9 required contract reports (DOCX Table 26) + each one's real generation history.
@@ -127,6 +130,59 @@ class ReportsService:
             # issues" framing for this report.
             "severity_breakdown": severity_breakdown,
             "operators": rows,
+        }
+
+    async def get_injury_report_by_flight(self, days: int = 90) -> dict[str, Any]:
+        """Real per-flight injury/recovery aggregate, k-gated - the Quarterly "by flight" breakdown.
+
+        Not DOCX-sourced (a Figma PT/IM Quarterly screen showed a
+        per-flight injury table with a fabricated "per 100 airmen" rate
+        and no real cohort-size basis - `get_injury_report`'s own
+        docstring already explains why that scaling was never invented).
+        Grouping the same real per-operator data by flight gives a rate
+        that DOES have a real basis: active-injury count over that
+        flight's own real cohort size, k-gated the same way
+        `LeadershipAggregateService`/`CoverageService` already gate every
+        other per-flight breakdown in this backend - never a raw
+        per-operator list.
+        """
+        cohort_k = (await self.role_admin_service.get_scope_config(ROLE_PTIM))["cohort_k"]
+        flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
+        injury_report = await self.get_injury_report(days)
+        rows_by_user_id = {row["user_id"]: row for row in injury_report["operators"]}
+
+        flight_rows: list[dict[str, Any]] = []
+        for flight in flights:
+            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            cohort_size = len(members)
+            if cohort_size < cohort_k:
+                continue
+
+            member_rows = [rows_by_user_id[str(m.id)] for m in members if str(m.id) in rows_by_user_id]
+            active_rows = [r for r in member_rows if r["reconditioning_phase"] not in (None, "completed")]
+            severity_breakdown: dict[str, int] = {}
+            for r in member_rows:
+                if r["severity_level"]:
+                    severity_breakdown[r["severity_level"]] = severity_breakdown.get(r["severity_level"], 0) + 1
+
+            flight_rows.append(
+                {
+                    "flight_id": str(flight.id),
+                    "flight_name": flight.name,
+                    "cohort_size": cohort_size,
+                    "active_injury_count": len(active_rows),
+                    "active_injury_rate_pct": round(len(active_rows) / cohort_size * 100, 1),
+                    "severity_breakdown": severity_breakdown,
+                }
+            )
+
+        flight_rows.sort(key=lambda item: item["flight_name"])
+        return {
+            "window_days": days,
+            "min_cohort_size": cohort_k,
+            "total_flights": len(flights),
+            "flights_meeting_cohort_minimum": len(flight_rows),
+            "flights": flight_rows,
         }
 
     async def get_assessment_completion_report(self) -> dict[str, Any]:

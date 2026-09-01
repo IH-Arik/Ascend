@@ -40,7 +40,7 @@ from app.schemas.admin_user import (
 from app.schemas.coverage_log import CoverageLogCreate
 from app.schemas.emergency_contact import EmergencyContactUpdate
 from app.schemas.equipment_gap import EquipmentGapCreate, EquipmentGapUpdate
-from app.schemas.idmt_handoff import IdmtHandoffCreateRequest
+from app.schemas.idmt_handoff import IdmtHandoffBatchCreateRequest, IdmtHandoffCreateRequest
 from app.schemas.leave_record import LeaveRecordCreate
 from app.schemas.org_unit import OrgUnitCreate
 from app.schemas.pt_session import PTSessionAttendeeAdd, PTSessionCreate, PTSessionUpdate
@@ -628,6 +628,30 @@ async def prepare_idmt_handoff(
     )
 
 
+@router.post(
+    "/idmt-handoffs/batch",
+    summary="Prepare a real IDMT handoff for each user in a cohort (pending second-reviewer approval, per user)",
+)
+async def prepare_idmt_handoff_batch(
+    payload: IdmtHandoffBatchCreateRequest,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+):
+    """PT/IM or Admin prepares one real, individually-approved handoff per user in a cohort.
+
+    Not a new handoff shape - each user still gets their own real
+    IdmtHandoff + PendingConfirmation, exactly as POST /idmt-handoffs
+    already does one at a time. This is real multiplicity, not a
+    shortcut around approval or a multi-user record.
+    """
+    data = await idmt_handoff_service.prepare_batch(
+        current_user, payload.user_ids, payload.export_type, payload.export_format
+    )
+    return JSONResponse(
+        status_code=202,
+        content=success_response(f"{data['requested_count']} handoffs pending second-reviewer approval.", data),
+    )
+
+
 @router.get("/idmt-handoffs", summary="List IDMT documentation handoffs")
 async def list_idmt_handoffs(
     current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_IDMT)),
@@ -1128,6 +1152,21 @@ async def export_prs_evidence(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
     )
+
+
+@router.get("/reports/injury/by-flight", summary="Real per-flight injury/recovery aggregate, k-gated")
+async def get_injury_report_by_flight(
+    days: int = 90,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+):
+    """Real per-flight injury aggregate for the Quarterly "by flight" breakdown.
+
+    Registered before `/reports/{report_type}` below - a literal 2-segment
+    path, not swallowed by that generic 1-segment parameterized route, but
+    kept above it for readability.
+    """
+    data = await reports_service.get_injury_report_by_flight(days)
+    return success_response("Per-flight injury report loaded successfully.", data)
 
 
 @router.get("/reports/{report_type}", summary="View a quarterly report")

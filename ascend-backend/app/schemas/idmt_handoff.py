@@ -13,6 +13,20 @@ class IdmtHandoffCreateRequest(BaseModel):
     export_format: str = Field(pattern="^(" + "|".join(EXPORT_FORMATS) + ")$")
 
 
+class IdmtHandoffBatchCreateRequest(BaseModel):
+    """PT/IM or Admin prepares one real handoff per user in a cohort.
+
+    Not a new handoff shape - each user still gets their own real,
+    individually-approved `IdmtHandoff` (DOCX Section 8.5's data
+    dictionary defines the entity per-user). This just lets one call
+    create several at once, capped at 50.
+    """
+
+    user_ids: list[str] = Field(min_length=1, max_length=50)
+    export_type: str = Field(pattern="^(" + "|".join(EXPORT_TYPES) + ")$")
+    export_format: str = Field(pattern="^(" + "|".join(EXPORT_FORMATS) + ")$")
+
+
 class IdmtHandoffResponse(BaseModel):
     """A single IDMT documentation handoff's transport-safe fields."""
 
