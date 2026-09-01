@@ -26,6 +26,9 @@ from pydantic import Field
 from pymongo import IndexModel
 
 STATUSES = ("open", "closed")
+NOTE_TYPES = ("intake", "follow_up")
+DOCUMENTATION_STATUSES = ("draft", "signed")
+DRAFT_EXPIRY_HOURS = 72
 
 
 def utc_now() -> datetime:
@@ -44,6 +47,19 @@ class SpecialistNote(Document):
     action_assigned: str | None = None
     follow_up_needed: bool = False
     status: str = "open"
+    # Real, added 2026-09-01 - the MP dashboard mock's Notes tab showed a
+    # note "Type" (Intake/Follow-up) and an "Escalation" flag with no real
+    # field behind either.
+    note_type: str = "follow_up"
+    escalated: bool = False
+    # Real, added 2026-09-01, explicit user go-ahead despite the DOCX's own
+    # "keep simple, not formal clinical or privileged documentation"
+    # language (Section 17) - a real draft/signed lifecycle, deliberately
+    # kept to just 2 states and one timestamp, not a full clinical-chart
+    # signature system. `documentation_status` is a separate concept from
+    # `status` above (concern-resolution, not documentation completion).
+    documentation_status: str = "draft"
+    signed_at: datetime | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
     class Settings:

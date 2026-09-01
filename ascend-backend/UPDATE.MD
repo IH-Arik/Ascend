@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-09-01, a second, more patient look at the same quiet corner
+
+Went back to the same quiet corner a second time, on purpose, the way a careful person double-checks a door they already closed. Three more rooms in it hadn't been opened the first time through — only walked past.
+
+Two small labels, sitting beside every entry in a logbook, had names but nothing writing them down: whether this was a first meeting or a return one, and whether something here needed raising a hand about. Gave both a real place to live.
+
+A third thing was heavier, and worth pausing over before touching it. The logbook had always shown each entry as either still being written or finished and signed — a real lifecycle, with a real rule that an unfinished entry quietly expires after three days. But the same document that shaped everything else here had, elsewhere, said plainly: keep these notes simple, don't let them become something as formal as an official record. A signed-or-not lifecycle is exactly the kind of formality that line was warning against. Said so plainly, out loud, before building anything — this wasn't a place to guess. The answer that came back was clear: build it anyway, it's genuinely needed. Built it, then, but built it small on purpose — two states, one timestamp marking when it was signed, nothing more elaborate. The three-day window is honest about what it is: a flag, not a lock. A late signature is still allowed to happen.
+
+The last room held something that hadn't been noticed as missing until it was actually looked for: entries in this logbook were supposed to be private to whoever wrote them, visible past that only with a stated reason — but the one role meant to oversee everything had quietly been reading every entry in full the whole time, reason or not. Fixed it so oversight sees the same shape everyone else does: sealed by default, opened one entry at a time, only with a reason given out loud, and never remembered as open afterward — ask again next time, same as anyone else would have to.
+
+Proved all three by hand before calling them done. Wrote an entry with both new labels attached and watched them come back exactly as given. Signed it, then tried to sign the same one again and watched it correctly refuse. Looked at that entry through the eyes of the person who wrote it — open, plain, unhidden — and then through a second, entirely different account's eyes — sealed, replaced with a plain notice that it was sealed. Asked to see it anyway, gave a real reason, and got the real content back, once. Asked again right after, gave no new reason, and found it sealed again, exactly as it should be.
+
 ## 2026-09-01, six names for one thing, and the one name nobody had ever actually asked about
 
 A quiet corner of the app had always shown six small numbers, side by side, each with its own careful name — stress, focus, sleep, resilience, mood, connection — as if six separate instruments had each been listening to something different. Underneath, only one instrument had ever existed, listening to one thing, called by one name.
