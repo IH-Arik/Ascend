@@ -26,6 +26,7 @@ class SupportRequestResponse(BaseModel):
     pathway_key: str
     pathway_label: str
     message: str | None
+    reason_category: str | None
     status: str
     priority_flag: bool
     safety_notice: str | None
@@ -44,6 +45,25 @@ class UpdateRequestStatusRequest(BaseModel):
     """A provider updating a support request's status."""
 
     status: str
+
+
+# Real, mapped from the MP dashboard mock's own "Referral reasons" widget
+# labels - a specialist picks the closest fit during triage, not a
+# fabricated auto-classification of the free-text message.
+REFERRAL_REASON_CATEGORIES = (
+    "Sleep concern",
+    "Pre-deployment stress",
+    "Performance anxiety",
+    "Family adjustment",
+    "Burnout screening",
+    "Other",
+)
+
+
+class UpdateReasonCategoryRequest(BaseModel):
+    """A specialist tagging a support request with a real triage category."""
+
+    reason_category: str = Field(pattern="^(" + "|".join(REFERRAL_REASON_CATEGORIES) + ")$")
 
 
 class TeamProvider(BaseModel):

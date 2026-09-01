@@ -76,6 +76,15 @@ RECOMMENDATION_RULES: dict[str, dict[str, Any]] = {
     "Mental Readiness": {
         "signal_label": "Mental",
         "provider_action_type": "scs_recommendation",
+        # Deliberately "SCS", not "Mental Performance" - confirmed
+        # intentional with the user, not a bug. Mental Readiness triggers
+        # never auto-assign to a Mental Performance provider; the "high"
+        # copy below only points the operator at their own support team.
+        # An MP provider's caseload fills exclusively through a real,
+        # self-initiated `SupportRequest` - a privacy-preserving
+        # self-referral design for behavioral health, not automatic
+        # routing the way SCS/PT-IM triggers work for the other 4
+        # components.
         "specialist_route": "SCS",
         "follow_up_timeline": "Next check-in",
         "moderate": {

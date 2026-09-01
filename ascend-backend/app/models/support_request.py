@@ -19,6 +19,12 @@ class SupportRequest(Document):
     pathway_key: str
     pathway_label: str
     message: str | None = None
+    # Not DOCX-sourced - set by the receiving specialist during triage (not
+    # the requester), matching DOCX 17's "user concern" being something a
+    # specialist documents, not a category the requester self-selects at
+    # submission. Real go-ahead, built for the MP dashboard's referral-
+    # reason distribution widget.
+    reason_category: str | None = None
     status: str = "open"
     priority_flag: bool = False
     safety_flag_terms: list[str] = Field(default_factory=list)

@@ -32,6 +32,7 @@ organization separately.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -176,6 +177,57 @@ class SupportService:
         )
         return self._serialize_request(record)
 
+    async def update_reason_category(
+        self, provider: User, request_id: str, reason_category: str
+    ) -> dict[str, Any]:
+        """Let the receiving specialist (or Admin) tag a request with a real triage category."""
+        record = await SupportRequest.get(request_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found.")
+        if provider.role not in ADMIN_ROLES and record.pathway_key != provider.role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This request is not routed to your role.",
+            )
+        record.reason_category = reason_category
+        record.updated_at = utc_now()
+        await record.save()
+        return self._serialize_request(record)
+
+    async def get_referral_reason_distribution(self, provider: User, days: int = 30) -> dict[str, Any]:
+        """Real category counts for the calling provider's own pathway, over a real window.
+
+        Only counts requests a specialist has actually triaged with a real
+        `reason_category` - uncategorized requests are excluded rather than
+        bucketed into a fabricated "Uncategorized" slice.
+        """
+        cutoff = utc_now() - timedelta(days=days)
+        pathway_key = provider.role
+        records = await SupportRequest.find(
+            SupportRequest.pathway_key == pathway_key,
+            SupportRequest.created_at >= cutoff,
+            SupportRequest.reason_category != None,  # noqa: E711 - Beanie operator overload
+        ).to_list()
+
+        counts: dict[str, int] = {}
+        for record in records:
+            counts[record.reason_category] = counts.get(record.reason_category, 0) + 1
+        total = sum(counts.values())
+
+        return {
+            "pathway_key": pathway_key,
+            "window_days": days,
+            "total_categorized": total,
+            "categories": [
+                {
+                    "label": label,
+                    "count": count,
+                    "pct": round(count / total * 100, 1) if total else 0.0,
+                }
+                for label, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
+            ],
+        }
+
     async def _notify_safety_flag(
         self,
         user: User,
@@ -230,6 +282,7 @@ class SupportService:
             "pathway_key": record.pathway_key,
             "pathway_label": record.pathway_label,
             "message": record.message,
+            "reason_category": record.reason_category,
             "status": record.status,
             "priority_flag": record.priority_flag,
             "safety_notice": SAFETY_NOTICE if record.priority_flag else None,

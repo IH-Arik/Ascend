@@ -34,7 +34,7 @@ from app.models import OrgUnit
 from app.models import PathwayApproval
 from app.models import PendingConfirmation
 from app.models import ProviderCredential
-from app.models import PTSession
+from app.models import MPSession, PTSession
 from app.models import ReconditioningEvent
 from app.models import ReconditioningPlan
 from app.models import Recommendation
@@ -112,6 +112,7 @@ async def init_db() -> None:
                 UtilizationEvent,
                 CoverageLog,
                 PTSession,
+                MPSession,
                 LeaveRecord,
                 ScoringConfig,
                 ReportExport,

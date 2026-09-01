@@ -80,6 +80,15 @@ async def get_specialist_dashboard(
     return success_response("Specialist dashboard loaded successfully.", data)
 
 
+@router.get("/mp/mental-drivers", status_code=status.HTTP_200_OK)
+async def get_mental_driver_scores(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_MENTAL_PERFORMANCE)),
+) -> dict[str, Any]:
+    """Mental Performance Dashboard - real, cohort-aggregate sub-driver scores (k-gated)."""
+    data = await provider_dashboard_service.get_mental_driver_scores(current_user)
+    return success_response("Mental driver scores loaded successfully.", data)
+
+
 @router.get("/leadership", status_code=status.HTTP_200_OK)
 async def get_leadership_dashboard(
     current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_LEADERSHIP)),

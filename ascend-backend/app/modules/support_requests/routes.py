@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, status
 
 from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
-from app.core.roles import ADMIN_ROLES, ROLE_PTIM, ROLE_SCS
+from app.core.roles import ADMIN_ROLES, ROLE_CHAPLAIN, ROLE_MENTAL_PERFORMANCE, ROLE_NUTRITIONIST, ROLE_PTIM, ROLE_SCS
 from app.models.user import User
 from app.schemas.support import SupportRequestCreate
 from app.schemas.support import TogglePathwayRequest
+from app.schemas.support import UpdateReasonCategoryRequest
 from app.schemas.support import UpdateRequestStatusRequest
 from app.services.support_service import SupportService
 from app.services.team_service import TeamService
@@ -17,6 +18,15 @@ from app.services.team_service import TeamService
 router = APIRouter()
 support_service = SupportService()
 team_service = TeamService()
+
+SPECIALIST_PROVIDER_ROLES = (
+    *ADMIN_ROLES,
+    ROLE_SCS,
+    ROLE_PTIM,
+    ROLE_MENTAL_PERFORMANCE,
+    ROLE_NUTRITIONIST,
+    ROLE_CHAPLAIN,
+)
 
 
 @router.get("/pathways", status_code=status.HTTP_200_OK)
@@ -49,7 +59,13 @@ async def list_support_requests(
 
 @router.get("/requests/assigned", status_code=status.HTTP_200_OK)
 async def get_assigned_support_requests(
-    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+    # Real fix: was scoped to only SCS/PT-IM, so the other 3 support
+    # pathways (Mental Performance, Nutritionist, Chaplain) had no way to
+    # list their own assigned requests through this route - even though
+    # `get_specialist_dashboard`'s `recent_requests` field already exposed
+    # the same data without this restriction. Widened to match, needed for
+    # the MP dashboard's real referral-reason tagging to be usable.
+    current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
 ) -> dict[str, Any]:
     """Return support requests routed to the calling provider's role (Admin sees all)."""
     data = await support_service.list_assigned_requests(current_user)
@@ -60,11 +76,35 @@ async def get_assigned_support_requests(
 async def update_support_request_status(
     request_id: str,
     payload: UpdateRequestStatusRequest,
-    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+    # Same real widen as `/requests/assigned` above - a specialist
+    # provider needs this to work the requests their own `assigned`
+    # listing now correctly shows them.
+    current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
 ) -> dict[str, Any]:
     """Update a support request's status (provider or Admin only)."""
     data = await support_service.update_request_status(current_user, request_id, payload.status)
     return success_response("Support request status updated successfully.", data)
+
+
+@router.patch("/requests/{request_id}/reason-category", status_code=status.HTTP_200_OK)
+async def update_support_request_reason_category(
+    request_id: str,
+    payload: UpdateReasonCategoryRequest,
+    current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
+) -> dict[str, Any]:
+    """Tag a support request with a real triage category (receiving specialist or Admin only)."""
+    data = await support_service.update_reason_category(current_user, request_id, payload.reason_category)
+    return success_response("Reason category updated successfully.", data)
+
+
+@router.get("/requests/referral-reasons", status_code=status.HTTP_200_OK)
+async def get_referral_reason_distribution(
+    days: int = 30,
+    current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
+) -> dict[str, Any]:
+    """Real referral-reason category distribution for the calling provider's own pathway."""
+    data = await support_service.get_referral_reason_distribution(current_user, days)
+    return success_response("Referral reason distribution loaded successfully.", data)
 
 
 @router.get("/team", status_code=status.HTTP_200_OK)

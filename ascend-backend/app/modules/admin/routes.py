@@ -13,7 +13,7 @@ from app.common.utils.responses import success_response
 from app.core import database as database_module
 from app.core.config import get_settings
 from app.core.question_registry import build_question_registry
-from app.core.roles import ADMIN_ROLES, ROLE_IDMT, ROLE_LEADERSHIP, ROLE_PTIM, ROLE_SCS
+from app.core.roles import ADMIN_ROLES, ROLE_IDMT, ROLE_LEADERSHIP, ROLE_MENTAL_PERFORMANCE, ROLE_PTIM, ROLE_SCS
 from app.core.scheduler import (
     DAILY_REMINDERS_JOB,
     EXPIRE_STALE_CONFIRMATIONS_JOB,
@@ -43,6 +43,7 @@ from app.schemas.equipment_gap import EquipmentGapCreate, EquipmentGapUpdate
 from app.schemas.idmt_handoff import IdmtHandoffBatchCreateRequest, IdmtHandoffCreateRequest
 from app.schemas.leave_record import LeaveRecordCreate
 from app.schemas.org_unit import OrgUnitCreate
+from app.schemas.mp_session import MPSessionCreate, MPSessionUpdate
 from app.schemas.pt_session import PTSessionAttendeeAdd, PTSessionCreate, PTSessionUpdate
 from app.schemas.provider_credential import CredentialCreate
 from app.schemas.question_bank_version import QuestionBankVersionCreate
@@ -63,6 +64,7 @@ from app.services.idmt_handoff_service import IdmtHandoffService
 from app.services.leadership_aggregate_service import LeadershipAggregateService
 from app.services.leave_service import LeaveService
 from app.services.oft_service import OFTService
+from app.services.mp_session_service import MPSessionService
 from app.services.pt_session_service import PTSessionService
 from app.services.org_unit_service import OrgUnitService
 from app.services.provider_dashboard_service import ProviderDashboardService
@@ -97,6 +99,7 @@ equipment_gap_service = EquipmentGapService()
 utilization_service = UtilizationService()
 coverage_service = CoverageService()
 pt_session_service = PTSessionService()
+mp_session_service = MPSessionService()
 leave_service = LeaveService()
 scoring_config_service = ScoringConfigService()
 question_bank_version_service = QuestionBankVersionService()
@@ -108,6 +111,7 @@ leadership_aggregate_service = LeadershipAggregateService()
 idmt_handoff_service = IdmtHandoffService()
 
 PROVIDER_ROLES = (*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)
+MP_PROVIDER_ROLES = (*ADMIN_ROLES, ROLE_MENTAL_PERFORMANCE)
 
 REPORT_BUILDERS = {
     "injury": lambda: reports_service.get_injury_report(),
@@ -1001,6 +1005,52 @@ async def list_pt_sessions_upcoming(
 ):
     """Return every real session scheduled in the next N days."""
     data = await pt_session_service.list_upcoming(days)
+    return success_response("Upcoming sessions loaded successfully.", data)
+
+
+@router.post(
+    "/mp-sessions",
+    status_code=status.HTTP_201_CREATED,
+    summary="Schedule a real Mental Performance session",
+)
+async def create_mp_session(
+    payload: MPSessionCreate,
+    current_user: User = Depends(require_roles(*MP_PROVIDER_ROLES)),
+):
+    """Schedule a real individual or group Mental Performance session."""
+    data = await mp_session_service.create(current_user, payload)
+    return success_response("Session scheduled successfully.", data)
+
+
+@router.patch("/mp-sessions/{session_id}", summary="Update a session's status")
+async def update_mp_session(
+    session_id: str,
+    payload: MPSessionUpdate,
+    current_user: User = Depends(require_roles(*MP_PROVIDER_ROLES)),
+):
+    """Update a real MP session's status."""
+    data = await mp_session_service.update(session_id, current_user, payload)
+    return success_response("Session updated successfully.", data)
+
+
+@router.get("/mp-sessions/today", summary="Today's real scheduled MP sessions")
+async def list_mp_sessions_today(
+    current_user: User = Depends(require_roles(*MP_PROVIDER_ROLES)),
+):
+    """Return today's real MP sessions - the caller's own if a real MP provider, all if admin."""
+    is_admin_view = current_user.role in ADMIN_ROLES
+    data = await mp_session_service.list_today(None if is_admin_view else current_user)
+    return success_response("Today's sessions loaded successfully.", data)
+
+
+@router.get("/mp-sessions/upcoming", summary="Upcoming real scheduled MP sessions")
+async def list_mp_sessions_upcoming(
+    days: int = 14,
+    current_user: User = Depends(require_roles(*MP_PROVIDER_ROLES)),
+):
+    """Return upcoming real MP sessions - the caller's own if a real MP provider, all if admin."""
+    is_admin_view = current_user.role in ADMIN_ROLES
+    data = await mp_session_service.list_upcoming(None if is_admin_view else current_user, days)
     return success_response("Upcoming sessions loaded successfully.", data)
 
 

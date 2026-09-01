@@ -1,5 +1,19 @@
 # Update Log
 
+## 2026-09-01, six names for one thing, and the one name nobody had ever actually asked about
+
+A quiet corner of the app had always shown six small numbers, side by side, each with its own careful name — stress, focus, sleep, resilience, mood, connection — as if six separate instruments had each been listening to something different. Underneath, only one instrument had ever existed, listening to one thing, called by one name.
+
+Went looking for the other five, one at a time, in every real question this whole system has ever asked anyone, from the first day to the daily and weekly and monthly ones after it. Four of the five were there, just filed under names of their own — one asked in different words at four different moments, one confidence question standing in for resilience, sleep's own real questions willing to be borrowed for a sleep number, connection's own real question willing to be borrowed for a connection number. Gave each of those four its own real home to draw from.
+
+The fifth number had nowhere to come from at all. Not one question, anywhere, in any bank, had ever asked how someone's mood actually was. Went and asked the one document that was supposed to have decided all of this from the start, in case it had quietly settled the question somewhere no one had checked yet. It hadn't. The word itself didn't appear there even once. Left that sixth number out rather than inventing a source for it or quietly borrowing someone else's answer and calling it new.
+
+Two smaller absences sat beside the first. A calendar of sessions that a caseload screen had always assumed existed — mornings, afternoons, one person or several — had never actually been kept anywhere. Built it a real place to live, one that knows the difference between a single quiet hour with one person and a room with several. And a shelf of reasons someone might be referred — sleep, stress before deploying, nerves before performing, family strain, burnout — had only ever been a single open sentence with nowhere to be sorted. Gave it real slots, filled in by the person actually receiving the referral, not guessed at by whoever sent it.
+
+Along the way, checking whether the newly-sorted reasons could even be reached, a door meant for exactly this specialist turned out to have quietly excluded them the whole time — open to two other kinds of provider, closed without explanation to this one, even though a different window nearby had been showing them the same room all along. Opened it properly. And one small mechanical mistake, calling a shelf's own words wrong, was caught the moment it was actually asked to do something and corrected before it could matter.
+
+One question was asked and answered on the record, not fixed because it had never been broken: why a certain kind of concern is still routed to a different team than the one built to hold it. The answer given back was that this was chosen on purpose — someone reaching out for that kind of help should choose to, not be quietly signed up for it by a number crossing a line on its own. Left exactly as it was, with the reason written down beside it this time.
+
 ## 2026-09-01, a word that stopped meaning anything, and nobody noticed until someone else started listening
 
 Someone asked for a plain explanation first — how a day's check-in, a week's, and a month's all fold together into one number. That part was easy to answer honestly: today always wins if it exists; failing that, this week's answer if it's not too old; failing that, this month's; failing all three, the score a person walked in with, quietly marked as aging.

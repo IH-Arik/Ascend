@@ -38,6 +38,7 @@ from app.models.deactivation_request import DeactivationRequest
 from app.models.equipment_gap import EquipmentGap
 from app.models.medical_record import MedicalRecord
 from app.models.oft_record import OFTRecord
+from app.models.onboarding_answer import OnboardingAnswer
 from app.models.recommendation import Recommendation
 from app.models.report_export import ReportExport
 from app.models.scheduler_job_run import SchedulerJobRun
@@ -73,6 +74,26 @@ SPECIALIST_COMPONENT_BY_ROLE = {
 # deliberately not approximated with a fabricated field.
 NUTRITION_SIGNAL_QUESTION_CODES = ("d0_04", "w_03", "w_04", "m_03", "m_04")
 NUTRITION_SIGNAL_WINDOW_DAYS = 60
+
+# Mental Performance dashboard's real, question-mapped sub-drivers. DOCX
+# doesn't define these as a named breakdown - built at the user's explicit
+# go-ahead after mapping each label to real question codes. A 6th mock
+# label, "Mood," was dropped: zero question anywhere (onboarding/daily/
+# weekly/monthly) covers it, confirmed against the DOCX too (no mention),
+# and it was deliberately not approximated with a duplicate of another
+# driver's signal. "Sleep quality" and "Connection" are real, but pulled
+# from the Sleep Readiness / Spiritual Readiness question sets respectively
+# - the mock groups them into this one panel as cross-component
+# psychological-support signals, not because they belong to the Mental
+# Readiness component itself.
+MENTAL_DRIVER_QUESTION_CODES: dict[str, tuple[str, ...]] = {
+    "Stress mgmt": ("ob_08", "d0_05", "w_05", "m_05"),
+    "Focus": ("ob_07", "d0_05", "w_06"),
+    "Resilience": ("ob_09", "m_06"),
+    "Sleep quality": ("d0_02", "d0_03", "w_09", "w_10", "m_09", "m_10"),
+    "Connection": ("w_08", "m_08"),
+}
+MENTAL_DRIVER_WINDOW_DAYS = 28
 
 
 class ProviderDashboardService:
@@ -318,6 +339,61 @@ class ProviderDashboardService:
             "hydration_energy_trend": trend_for("w_04") or trend_for("d0_04"),
             "skipped_meals_or_low_hydration_flags_60d": len(flagged),
             "checkins_logged_60d": len({a.checkin_date for a in answers}),
+        }
+
+    async def get_mental_driver_scores(self, provider: User) -> dict[str, Any]:
+        """Cohort-aggregate Mental Performance sub-driver scores.
+
+        k-gated the same way as every other cohort aggregate in this
+        codebase (`RoleAdminService.get_scope_config`'s real `cohort_k`) -
+        genuinely suppressed below the real minimum, not just hidden
+        cosmetically. See `MENTAL_DRIVER_QUESTION_CODES` for how each
+        driver maps to real question codes.
+        """
+        is_admin_view = provider.role in ADMIN_ROLES
+        user_ids = await self._assigned_user_ids(
+            None if is_admin_view else provider.id, ROLE_MENTAL_PERFORMANCE
+        )
+        scope_config = await self.role_admin_service.get_scope_config(ROLE_MENTAL_PERFORMANCE)
+        cohort_k = scope_config["cohort_k"]
+
+        if len(user_ids) < cohort_k:
+            return {
+                "cohort_size": len(user_ids),
+                "cohort_k": cohort_k,
+                "window_days": MENTAL_DRIVER_WINDOW_DAYS,
+                "suppressed": True,
+                "drivers": None,
+            }
+
+        cutoff = date.today() - timedelta(days=MENTAL_DRIVER_WINDOW_DAYS)
+        checkin_answers: list[Any] = []
+        onboarding_answers: list[Any] = []
+        for user_id in user_ids:
+            checkin_answers.extend(
+                await CheckinAnswer.find(
+                    CheckinAnswer.user_id == user_id, CheckinAnswer.checkin_date >= cutoff
+                ).to_list()
+            )
+            onboarding_answers.extend(
+                await OnboardingAnswer.find(OnboardingAnswer.user_id == user_id).to_list()
+            )
+        scores_by_code: dict[str, list[float]] = {}
+        for answer in (*checkin_answers, *onboarding_answers):
+            if answer.scoreable and answer.numeric_score_100 is not None:
+                scores_by_code.setdefault(answer.question_code, []).append(answer.numeric_score_100)
+
+        drivers: dict[str, float | None] = {}
+        for driver_name, codes in MENTAL_DRIVER_QUESTION_CODES.items():
+            values = [v for code in codes for v in scores_by_code.get(code, [])]
+            drivers[driver_name] = round(sum(values) / len(values), 1) if values else None
+
+        return {
+            "cohort_size": len(user_ids),
+            "cohort_k": cohort_k,
+            "window_days": MENTAL_DRIVER_WINDOW_DAYS,
+            "suppressed": False,
+            "drivers": drivers,
         }
 
     async def get_leadership_dashboard(self) -> dict[str, Any]:
