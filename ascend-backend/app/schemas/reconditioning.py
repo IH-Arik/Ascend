@@ -54,6 +54,10 @@ class ReconditioningPlanUpdate(BaseModel):
     )
     severity_level: str | None = Field(default=None, pattern="^(" + "|".join(SEVERITY_LEVELS) + ")$")
     injury_reported_on: date | None = None
+    rtd_source_authority: str | None = Field(default=None, max_length=120)
+    rtd_decision_date: date | None = None
+    rtd_verified: bool = False
+    rtd_reevaluation_date: date | None = None
 
 
 class ReconditioningPlanResponse(BaseModel):
@@ -77,4 +81,9 @@ class ReconditioningPlanResponse(BaseModel):
     severity_level: str | None = None
     injury_reported_on: str | None = None
     days_out: int | None = None
+    rtd_source_authority: str | None = None
+    rtd_decision_date: str | None = None
+    rtd_verified: bool = False
+    rtd_reevaluation_date: str | None = None
+    rtd_cleared: bool = False
     updated_at: str | None = None

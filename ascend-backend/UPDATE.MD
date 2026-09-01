@@ -1,5 +1,19 @@
 # Update Log
 
+## 2026-08-25, PT-IM deep re-scan (a second look, on purpose, before calling it finished)
+
+Went back over the same ground once more, deliberately, rather than trusting that "done" from a few hours ago was still the whole truth. It mostly was — but a second, more patient look found four more real things, sitting quietly in a page that had already been checked once.
+
+A rate that looked finished still wasn't telling the truth it claimed to. It called itself a rate "per hundred person-months" — a real, respected way of measuring how often something new happens over time — but underneath, all it had ever measured was a headcount snapshot: how many, right now, out of how many total. Different questions, wearing the same label. Kept the honest snapshot exactly as it was, and built the actual time-based rate beside it as its own real, separate number — using real dates for when each new case was actually reported, and being upfront that the "how many months of exposure" part is a real approximation, not a precise clock, since nobody's exact time-in-unit has ever been tracked here.
+
+A page had shown four seasons side by side, each with its own name and its own story — but underneath, there had only ever been one sliding window that could look backward by any number of days, with no memory of where one real season ended and the next began. Gave the calendar its real boundaries back — the actual fixed three-month blocks a real fiscal year is built from — so a specific season can now be asked for by name and get a real, unmoving answer, not a rough approximation of one.
+
+A breakdown by type of injury had a warning label sitting on it — a promise that anything too small to name safely would be quietly withheld — but nothing underneath had ever actually withheld anything. Made the promise true: now a type with too few real people behind it is genuinely hidden, not just described as hidden.
+
+And a rule repeated three times across the page — that clearing someone to return to duty needs four specific things confirmed, together, before it counts — had never had anywhere to actually keep those four things. Gave it a real place to hold each one, and made the clearance itself a real, computed fact — true only the moment all four are genuinely present, never assumed, never partial.
+
+Proved each one by hand rather than trusting the description of it — left one of the four return-to-duty pieces out and watched clearance correctly stay false, then added it back and watched it correctly flip true. Planted a real injury on a real date and asked the calendar for the exact season it actually fell in — the real boundaries came back exactly right, and the rate built on top of them landed on the right number. Asked the same question about a different season and watched that same real injury correctly not show up there at all. And planted one small injury type with too few people behind it, and watched the count get properly withheld instead of just quietly ignored.
+
 ## 2026-08-25, PT-IM (a rate that finally means something, a real refusal held to on principle, and one request sent to many people without pretending it was ever one)
 
 Four things asked about, one by one. Two got built. One got a plain no, for a reason that wasn't mine to override. One got left exactly as it already honestly was.

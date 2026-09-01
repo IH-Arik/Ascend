@@ -65,6 +65,11 @@ class ReconditioningService:
         record.scs_coordination_status = payload.scs_coordination_status
         record.severity_level = payload.severity_level
         record.injury_reported_on = payload.injury_reported_on
+        was_rtd_cleared = self._is_rtd_cleared(record)
+        record.rtd_source_authority = payload.rtd_source_authority
+        record.rtd_decision_date = payload.rtd_decision_date
+        record.rtd_verified = payload.rtd_verified
+        record.rtd_reevaluation_date = payload.rtd_reevaluation_date
         record.updated_by = updated_by
         record.updated_at = utc_now()
         await record.save()
@@ -94,6 +99,14 @@ class ReconditioningService:
                     f"{old_severity or 'not set'} -> {record.severity_level or 'not set'}",
                     updated_by,
                 )
+            is_rtd_cleared = self._is_rtd_cleared(record)
+            if was_rtd_cleared != is_rtd_cleared:
+                await self._log_event(
+                    target_user.id,
+                    "rtd_cleared" if is_rtd_cleared else "rtd_cleared_revoked",
+                    "All 4 RTD fields present." if is_rtd_cleared else "One or more RTD fields removed.",
+                    updated_by,
+                )
 
         return self._serialize(record)
 
@@ -120,6 +133,15 @@ class ReconditioningService:
                 for e in events
             ]
         }
+
+    def _is_rtd_cleared(self, record: ReconditioningPlan) -> bool:
+        """Real 4-field RTD gate - true only when every field is genuinely present."""
+        return bool(
+            record.rtd_source_authority
+            and record.rtd_decision_date
+            and record.rtd_verified
+            and record.rtd_reevaluation_date
+        )
 
     async def _log_event(self, user_id: Any, event_type: str, detail: str, recorded_by: Any) -> None:
         """Append one real event to a user's reconditioning-event timeline."""
@@ -159,5 +181,12 @@ class ReconditioningService:
                 if record.injury_reported_on and record.phase != "completed"
                 else None
             ),
+            "rtd_source_authority": record.rtd_source_authority,
+            "rtd_decision_date": record.rtd_decision_date.isoformat() if record.rtd_decision_date else None,
+            "rtd_verified": record.rtd_verified,
+            "rtd_reevaluation_date": (
+                record.rtd_reevaluation_date.isoformat() if record.rtd_reevaluation_date else None
+            ),
+            "rtd_cleared": self._is_rtd_cleared(record),
             "updated_at": record.updated_at.isoformat(),
         }

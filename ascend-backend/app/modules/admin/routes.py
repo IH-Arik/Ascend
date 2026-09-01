@@ -1157,16 +1157,43 @@ async def export_prs_evidence(
 @router.get("/reports/injury/by-flight", summary="Real per-flight injury/recovery aggregate, k-gated")
 async def get_injury_report_by_flight(
     days: int = 90,
+    fiscal_year: int | None = None,
+    quarter: int | None = None,
     current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
 ):
     """Real per-flight injury aggregate for the Quarterly "by flight" breakdown.
+
+    Pass both `fiscal_year` and `quarter` (1-4) for a real, closed DoD
+    fiscal-quarter window instead of the default rolling `days` window.
 
     Registered before `/reports/{report_type}` below - a literal 2-segment
     path, not swallowed by that generic 1-segment parameterized route, but
     kept above it for readability.
     """
-    data = await reports_service.get_injury_report_by_flight(days)
+    data = await reports_service.get_injury_report_by_flight(days, fiscal_year, quarter)
     return success_response("Per-flight injury report loaded successfully.", data)
+
+
+@router.get("/reports/injury/quarters", summary="Real by-flight injury breakdown for all 4 fiscal quarters")
+async def get_injury_report_all_quarters(
+    fiscal_year: int,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+):
+    """Real, comparable 4-quarter view - each quarter a real closed calendar window, not a relabeled rolling window."""
+    data = await reports_service.get_injury_report_all_quarters(fiscal_year)
+    return success_response("Quarterly injury report loaded successfully.", data)
+
+
+@router.get("/reports/injury/types", summary="Real per-injury-type counts, k-gated")
+async def get_injury_type_breakdown(
+    days: int = 90,
+    fiscal_year: int | None = None,
+    quarter: int | None = None,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+):
+    """Real per-injury-type breakdown - types with fewer than the real cohort-k minimum are genuinely suppressed."""
+    data = await reports_service.get_injury_type_breakdown(days, fiscal_year, quarter)
+    return success_response("Injury type breakdown loaded successfully.", data)
 
 
 @router.get("/reports/{report_type}", summary="View a quarterly report")

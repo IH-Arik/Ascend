@@ -34,6 +34,27 @@ PRS_TARGET_HOURS = {ROLE_SCS: 2080.0, ROLE_PTIM: 512.0}
 PRS_COVERAGE_EVIDENCE_THRESHOLD = 0.95
 
 
+def fiscal_quarter_bounds(fiscal_year: int, quarter: int) -> tuple[date, date]:
+    """Return the real (start, end) calendar dates for one DoD fiscal quarter.
+
+    DoD fiscal year starts Oct 1 of the prior calendar year - FY26 runs
+    2025-10-01 through 2026-09-30. Q1=Oct-Dec, Q2=Jan-Mar, Q3=Apr-Jun,
+    Q4=Jul-Sep. Not DOCX-sourced (a Figma PT/IM Quarterly screen showed 4
+    named historical quarters with no real boundary definition anywhere)
+    - this is the standard, real DoD fiscal-quarter convention, not an
+    invented one.
+    """
+    if quarter not in (1, 2, 3, 4):
+        raise ValueError("quarter must be 1-4.")
+    if quarter == 1:
+        return date(fiscal_year - 1, 10, 1), date(fiscal_year - 1, 12, 31)
+    if quarter == 2:
+        return date(fiscal_year, 1, 1), date(fiscal_year, 3, 31)
+    if quarter == 3:
+        return date(fiscal_year, 4, 1), date(fiscal_year, 6, 30)
+    return date(fiscal_year, 7, 1), date(fiscal_year, 9, 30)
+
+
 class ReportsService:
     """Build the four quarterly reports from real tracked data."""
 
@@ -132,24 +153,54 @@ class ReportsService:
             "operators": rows,
         }
 
-    async def get_injury_report_by_flight(self, days: int = 90) -> dict[str, Any]:
+    async def get_injury_report_by_flight(
+        self, days: int = 90, fiscal_year: int | None = None, quarter: int | None = None
+    ) -> dict[str, Any]:
         """Real per-flight injury/recovery aggregate, k-gated - the Quarterly "by flight" breakdown.
 
         Not DOCX-sourced (a Figma PT/IM Quarterly screen showed a
         per-flight injury table with a fabricated "per 100 airmen" rate
         and no real cohort-size basis - `get_injury_report`'s own
         docstring already explains why that scaling was never invented).
-        Grouping the same real per-operator data by flight gives a rate
-        that DOES have a real basis: active-injury count over that
-        flight's own real cohort size, k-gated the same way
-        `LeadershipAggregateService`/`CoverageService` already gate every
-        other per-flight breakdown in this backend - never a raw
-        per-operator list.
+        Grouping the same real per-operator data by flight gives 2 real
+        rates side by side, deliberately not merged into one number since
+        they answer different questions:
+        - `active_injury_rate_pct` - a live snapshot: % of the flight
+          currently in an active injury/reconditioning phase.
+        - `incidence_rate_per_100_person_months` - a real, period-based
+          incidence rate (added 2026-08-25, explicit go-ahead) - new
+          injuries reported in the window (real `injury_reported_on`
+          dates) per 100 real person-months of exposure.
+          `person_months_at_risk` is a real, clearly-approximated figure
+          (`cohort_size * window_days / 30`) - this backend does not
+          track per-user enrollment/observation periods, so exact
+          person-time isn't available; a flat cohort-size x
+          window-duration approximation is the honest real basis, not a
+          fabricated one, and is documented as an approximation rather
+          than presented as more precise than it is.
+
+        `fiscal_year`/`quarter` (1-4, DoD fiscal quarters via
+        `fiscal_quarter_bounds`), when both given, replace the rolling
+        `days` window with a real, closed calendar-quarter boundary - the
+        real Quarter-scoping a Figma Quarterly screen implied (4 distinct,
+        comparable historical quarters) but the rolling-window-only
+        version of this endpoint couldn't reproduce. `days` stays the
+        default for a live/rolling view when no quarter is given.
         """
+        if fiscal_year is not None and quarter is not None:
+            window_start, window_end = fiscal_quarter_bounds(fiscal_year, quarter)
+            window_days = (window_end - window_start).days + 1
+        else:
+            window_end = date.today()
+            window_start = window_end - timedelta(days=days)
+            window_days = days
+
         cohort_k = (await self.role_admin_service.get_scope_config(ROLE_PTIM))["cohort_k"]
         flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
         injury_report = await self.get_injury_report(days)
         rows_by_user_id = {row["user_id"]: row for row in injury_report["operators"]}
+        all_plans = await ReconditioningPlan.find().to_list()
+        plans_by_user_id: dict[str, ReconditioningPlan] = {str(p.user_id): p for p in all_plans}
 
         flight_rows: list[dict[str, Any]] = []
         for flight in flights:
@@ -165,6 +216,16 @@ class ReportsService:
                 if r["severity_level"]:
                     severity_breakdown[r["severity_level"]] = severity_breakdown.get(r["severity_level"], 0) + 1
 
+            new_incidence_count = 0
+            for m in members:
+                plan = plans_by_user_id.get(str(m.id))
+                if plan and plan.injury_reported_on and window_start <= plan.injury_reported_on <= window_end:
+                    new_incidence_count += 1
+            person_months_at_risk = round(cohort_size * window_days / 30, 1)
+            incidence_rate = (
+                round(new_incidence_count / person_months_at_risk * 100, 1) if person_months_at_risk > 0 else None
+            )
+
             flight_rows.append(
                 {
                     "flight_id": str(flight.id),
@@ -173,16 +234,88 @@ class ReportsService:
                     "active_injury_count": len(active_rows),
                     "active_injury_rate_pct": round(len(active_rows) / cohort_size * 100, 1),
                     "severity_breakdown": severity_breakdown,
+                    "new_injury_incidence_count": new_incidence_count,
+                    "person_months_at_risk": person_months_at_risk,
+                    "incidence_rate_per_100_person_months": incidence_rate,
                 }
             )
 
         flight_rows.sort(key=lambda item: item["flight_name"])
         return {
-            "window_days": days,
+            "window_days": window_days,
+            "window_start": window_start.isoformat(),
+            "window_end": window_end.isoformat(),
+            "fiscal_year": fiscal_year,
+            "quarter": quarter,
             "min_cohort_size": cohort_k,
             "total_flights": len(flights),
             "flights_meeting_cohort_minimum": len(flight_rows),
             "flights": flight_rows,
+        }
+
+    async def get_injury_report_all_quarters(self, fiscal_year: int) -> dict[str, Any]:
+        """Real by-flight injury breakdown for all 4 real DoD fiscal quarters of one fiscal year.
+
+        The real, comparable 4-quarter view a Figma Quarterly screen
+        implied - each quarter is a real, closed calendar window (see
+        `fiscal_quarter_bounds`), not a rolling window relabeled 4 times.
+        """
+        quarters = []
+        for q in (1, 2, 3, 4):
+            data = await self.get_injury_report_by_flight(fiscal_year=fiscal_year, quarter=q)
+            quarters.append({"quarter": q, **data})
+        return {"fiscal_year": fiscal_year, "quarters": quarters}
+
+    async def get_injury_type_breakdown(
+        self, days: int = 90, fiscal_year: int | None = None, quarter: int | None = None
+    ) -> dict[str, Any]:
+        """Real per-injury-type counts, k-gated - the "Injury type breakdown" panel.
+
+        Not DOCX-sourced (a Figma PT/IM Quarterly screen showed this with
+        no real data source, plus a fabricated k-gated-suppression banner
+        with no real logic behind it - "Wrist injuries (k=2) suppressed").
+        This is that suppression made real: counts real `injury_flags`
+        values (free-text tags already captured on `ReconditioningPlan`,
+        e.g. "knee") across every currently-active real plan in the real
+        window; any type with fewer than the real PT/IM cohort-k minimum
+        is genuinely suppressed (count withheld, `suppressed: true`)
+        rather than shown - the same real k-anonymity principle already
+        applied per-flight, applied here per-injury-type instead.
+        """
+        if fiscal_year is not None and quarter is not None:
+            window_start, window_end = fiscal_quarter_bounds(fiscal_year, quarter)
+        else:
+            window_end = date.today()
+            window_start = window_end - timedelta(days=days)
+
+        cohort_k = (await self.role_admin_service.get_scope_config(ROLE_PTIM))["cohort_k"]
+        plans = await ReconditioningPlan.find().to_list()
+        relevant_plans = [
+            p
+            for p in plans
+            if p.phase != "completed"
+            and p.injury_reported_on
+            and window_start <= p.injury_reported_on <= window_end
+        ]
+
+        type_counts: dict[str, int] = {}
+        for plan in relevant_plans:
+            for flag in plan.injury_flags:
+                type_counts[flag] = type_counts.get(flag, 0) + 1
+
+        types = [
+            {
+                "injury_type": injury_type,
+                "count": count if count >= cohort_k else None,
+                "suppressed": count < cohort_k,
+            }
+            for injury_type, count in sorted(type_counts.items())
+        ]
+        return {
+            "window_start": window_start.isoformat(),
+            "window_end": window_end.isoformat(),
+            "min_cohort_size": cohort_k,
+            "types": types,
         }
 
     async def get_assessment_completion_report(self) -> dict[str, Any]:

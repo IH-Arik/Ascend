@@ -48,6 +48,17 @@ class ReconditioningPlan(Document):
     # Net-new (2026-08-13, not DOCX-sourced - see module docstring).
     severity_level: str | None = None
     injury_reported_on: date | None = None
+    # Net-new (2026-08-25, not DOCX-sourced, explicit user go-ahead) - the
+    # real 4-field Return to Duty gate a Figma PT/IM screen described
+    # ("RTD requires source-authority + decision date + verification +
+    # reevaluation/expiration; only surfaced when all four are present")
+    # but had no backing for at all. `rtd_cleared` (derived, not stored -
+    # see `reconditioning_service.py`) is true only when every one of
+    # these 4 fields is genuinely set - never a shortcut/partial clearance.
+    rtd_source_authority: str | None = None
+    rtd_decision_date: date | None = None
+    rtd_verified: bool = False
+    rtd_reevaluation_date: date | None = None
     updated_by: PydanticObjectId | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
