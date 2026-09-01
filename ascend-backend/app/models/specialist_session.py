@@ -1,13 +1,19 @@
-"""Mental Performance provider session schedule.
+"""Specialist provider session schedule (Mental Performance/Nutritionist/Chaplain).
 
-Not DOCX-sourced (the Figma MP dashboard showed a "Today's sessions"
-widget - time, individual/group, topic, status - with no backend concept
-anywhere). Real new scope, explicit user go-ahead: a real, scheduled
-session (individual or group) a Mental Performance provider leads,
-distinct from a `SupportRequest` (which is the user's initial ask, not a
-scheduled meeting) and from `SpecialistNote` (the record of what happened
-in a session, not the schedule of one). Mirrors `PTSession`'s real
-attendee/capacity pattern, adapted for the mostly-1:1 nature of MP care.
+Not DOCX-sourced (the Figma MP and Nutritionist dashboards each showed
+their own "Today's sessions"/"Consult queue" widget - time, individual/
+group, topic, status - with no backend concept anywhere). Real new scope,
+explicit user go-ahead: a real, scheduled session (individual or group) a
+specialist provider leads, distinct from a `SupportRequest` (the user's
+initial ask, not a scheduled meeting) and from `SpecialistNote` (the
+record of what happened in a session, not the schedule of one). Mirrors
+`PTSession`'s real attendee/capacity pattern.
+
+Started as MP-only (`MPSession`, 2026-09-01) and was generalized the same
+day, before any frontend wiring existed, once the Nutritionist audit hit
+the identical "consult scheduling" gap - one shared model across all 3
+optional specialist pathways rather than 3 near-duplicates, matching how
+`SpecialistNote` is already a single shared model.
 """
 
 from datetime import date, datetime, timezone
@@ -22,8 +28,8 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class MPSession(Document):
-    """A single scheduled Mental Performance session, individual or group."""
+class SpecialistSession(Document):
+    """A single scheduled specialist session, individual or group."""
 
     provider_id: PydanticObjectId
     provider_role: str
@@ -44,7 +50,7 @@ class MPSession(Document):
     class Settings:
         """Beanie collection settings."""
 
-        name = "mp_sessions"
+        name = "specialist_sessions"
         indexes = [
             IndexModel([("provider_id", 1), ("session_date", 1)]),
         ]

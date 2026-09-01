@@ -89,6 +89,15 @@ async def get_mental_driver_scores(
     return success_response("Mental driver scores loaded successfully.", data)
 
 
+@router.get("/nutrition/meal-consistency", status_code=status.HTTP_200_OK)
+async def get_meal_consistency_by_flight(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_NUTRITIONIST)),
+) -> dict[str, Any]:
+    """Nutritionist Dashboard - real, k-gated per-flight meal-consistency aggregate."""
+    data = await provider_dashboard_service.get_meal_consistency_by_flight(current_user)
+    return success_response("Meal consistency by flight loaded successfully.", data)
+
+
 @router.get("/leadership", status_code=status.HTTP_200_OK)
 async def get_leadership_dashboard(
     current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_LEADERSHIP)),

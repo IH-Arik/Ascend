@@ -39,6 +39,7 @@ from app.models.equipment_gap import EquipmentGap
 from app.models.medical_record import MedicalRecord
 from app.models.oft_record import OFTRecord
 from app.models.onboarding_answer import OnboardingAnswer
+from app.models.org_unit import OrgUnit
 from app.models.recommendation import Recommendation
 from app.models.report_export import ReportExport
 from app.models.scheduler_job_run import SchedulerJobRun
@@ -394,6 +395,71 @@ class ProviderDashboardService:
             "window_days": MENTAL_DRIVER_WINDOW_DAYS,
             "suppressed": False,
             "drivers": drivers,
+        }
+
+    async def get_meal_consistency_by_flight(self, provider: User) -> dict[str, Any]:
+        """Real, k-gated per-flight meal-consistency aggregate for the Nutritionist dashboard.
+
+        Not DOCX-sourced (the Figma Nutritionist dashboard showed a "Meal
+        consistency by flight" table with Acknowledged/Completed/Pending
+        review/NS Signal columns implying an action-tracking system that
+        doesn't exist - Nutritional Readiness recommendations route to SCS,
+        not Nutritionist, confirmed intentional design, so there is no real
+        per-flight "Nutrition Action" volume to report). Built instead from
+        the real signal this backend actually has: each member's
+        `_build_nutrition_signals` (meal-consistency/hydration flags),
+        rolled up per flight. `consistency_level` is a real, disclosed
+        classification of the real flagged-rate, not a fabricated metric -
+        thresholds are this service's own choice, not DOCX-sourced.
+        `pending_review_count` is a real count of open Nutritionist
+        `SupportRequest`s from flight members, the closest real analogue to
+        "pending review".
+        """
+        cohort_k = (await self.role_admin_service.get_scope_config(ROLE_NUTRITIONIST))["cohort_k"]
+        flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
+        today = date.today()
+        open_requests = await SupportRequest.find(
+            SupportRequest.pathway_key == ROLE_NUTRITIONIST, SupportRequest.status == "open"
+        ).to_list()
+        requester_ids_pending = {r.user_id for r in open_requests}
+
+        flight_rows: list[dict[str, Any]] = []
+        for flight in flights:
+            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            cohort_size = len(members)
+            if cohort_size < cohort_k:
+                continue
+
+            flagged_members = 0
+            for member in members:
+                signals = await self._build_nutrition_signals(member.id, today)
+                if signals["skipped_meals_or_low_hydration_flags_60d"] > 0:
+                    flagged_members += 1
+            flagged_rate_pct = round(flagged_members / cohort_size * 100, 1)
+            consistency_level = (
+                "High" if flagged_rate_pct < 20 else "Mixed" if flagged_rate_pct < 50 else "Lagging"
+            )
+            pending_review_count = sum(1 for m in members if m.id in requester_ids_pending)
+
+            flight_rows.append(
+                {
+                    "flight_id": str(flight.id),
+                    "flight_name": flight.name,
+                    "cohort_size": cohort_size,
+                    "flagged_members": flagged_members,
+                    "flagged_rate_pct": flagged_rate_pct,
+                    "consistency_level": consistency_level,
+                    "pending_review_count": pending_review_count,
+                }
+            )
+
+        flight_rows.sort(key=lambda item: item["flight_name"])
+        return {
+            "window_days": NUTRITION_SIGNAL_WINDOW_DAYS,
+            "min_cohort_size": cohort_k,
+            "total_flights": len(flights),
+            "flights_meeting_cohort_minimum": len(flight_rows),
+            "flights": flight_rows,
         }
 
     async def get_leadership_dashboard(self) -> dict[str, Any]:

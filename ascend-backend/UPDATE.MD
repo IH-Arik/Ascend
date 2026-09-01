@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-09-01, a second door, the same missing room, and a decision not to build the room twice
+
+Walked into a second, neighboring wing of the same building, expecting it to be its own place. It mostly was. But one thing already noticed once, in the first wing's own logbook, had no bearing on this second wing's own pie-chart wall of neat percentages, still standing there with nothing real behind it — recognized on sight this time, as the same familiar picture already refused once before, and left refused a second time without needing to ask again.
+
+Two real things were missing here that hadn't been missing next door. A wall meant to show how well each group was keeping up with their meals had never had anything real feeding it — only a color and a word borrowed from nowhere. Built it a real basis instead: rolled the same honest per-person signal already gathered elsewhere into a real per-group picture, gave it an honest label for what it actually shows, and left out the parts that would have needed to invent a volume of activity that this building had already decided, on purpose, not to generate automatically.
+
+And a calendar of one-on-one and group meetings had gone missing here the exact same way it had gone missing next door, hours earlier — down to the same room shape, the same kind of entries. Rather than build a second, near-identical calendar just because it lived in a different wing, went back and widened the first one so both wings could share it — one real calendar, open to whichever of the three kinds of specialist actually needed it, instead of three almost-identical ones standing side by side for no real reason.
+
+Proved the shared calendar still worked exactly the same after being widened, from the new wing's own door this time — a real one-on-one meeting booked and found again on the day's list; the old, narrower door to the same calendar correctly gone, answering nothing rather than quietly still working; a malformed group booking still caught and refused the same way it always had been. And the group-meal wall, asked for real, came back showing something already true and already sitting in the records from a much older visit — one group genuinely running behind, correctly marked as such, the rest correctly not.
+
 ## 2026-09-01, a second, more patient look at the same quiet corner
 
 Went back to the same quiet corner a second time, on purpose, the way a careful person double-checks a door they already closed. Three more rooms in it hadn't been opened the first time through — only walked past.

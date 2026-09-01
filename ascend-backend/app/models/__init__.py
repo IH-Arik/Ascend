@@ -24,7 +24,7 @@ from app.models.org_unit import OrgUnit
 from app.models.pathway_approval import PathwayApproval
 from app.models.pending_confirmation import PendingConfirmation
 from app.models.provider_credential import ProviderCredential
-from app.models.mp_session import MPSession
+from app.models.specialist_session import SpecialistSession
 from app.models.pt_session import PTSession
 from app.models.reconditioning_event import ReconditioningEvent
 from app.models.reconditioning_plan import ReconditioningPlan
@@ -73,7 +73,7 @@ __all__ = [
     "PendingConfirmation",
     "ProviderCredential",
     "PTSession",
-    "MPSession",
+    "SpecialistSession",
     "ReconditioningEvent",
     "ReconditioningPlan",
     "Recommendation",
