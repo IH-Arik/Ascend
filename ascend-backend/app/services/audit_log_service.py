@@ -13,10 +13,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from fastapi import HTTPException, status
+
 from app.models.audit_log import AuditLog
 from app.models.medical_record import MedicalRecordAccessEvent
 from app.models.pending_confirmation import PendingConfirmation
 from app.models.report_export import ReportExport
+from app.models.user import User
 
 # Real, confirmed retention policy (docs/AUDIT_LOG_RULES.md) - exposed as
 # metadata only, never auto-deletion: the same doc's own "audit logs should
@@ -89,6 +92,66 @@ class AuditLogService:
             outcome_status=outcome_status,
         )
         await record.insert()
+        return record
+
+    async def open_event(
+        self, actor: User, target_entity_type: str, target_entity_id: str, summary_message: str
+    ) -> AuditLog:
+        """Log that a user opened/started viewing a real record - the paired start of a
+        real, immutable open/close duration pair (see `close_event`).
+
+        Real, added 2026-09-01 - the Nutritionist dashboard's "Access log"
+        widget showed a real who/when/what access trail (already backed by
+        this same audit log) plus a per-open "Duration" column with no real
+        source anywhere. Rather than add an update path to an explicitly
+        append-only, immutable model (this service's own docstring, and
+        `docs/AUDIT_LOG_RULES.md`, both say never update or delete an
+        existing entry), duration is 2 real, separate immutable events -
+        this one, and `close_event` below - with the real elapsed time
+        computed server-side from their two real timestamps, not trusted
+        from the client.
+        """
+        return await self.record(
+            event_type="record_view_opened",
+            actor_id=actor.id,
+            actor_role=actor.role,
+            target_entity_type=target_entity_type,
+            target_entity_id=target_entity_id,
+            summary_message=summary_message,
+        )
+
+    async def close_event(self, actor: User, open_event_id: str) -> AuditLog:
+        """Log the real, server-computed duration of a paired `open_event`.
+
+        Only the original opener may close their own open event. A given
+        open event may only be closed once (the search for another
+        `record_view_closed` referencing the same open id prevents a
+        double-close, not by mutating the open event, but by refusing a
+        2nd close event).
+        """
+        open_log = await AuditLog.get(open_event_id)
+        if open_log is None or open_log.event_type != "record_view_opened":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Open event not found.")
+        if open_log.actor_id != actor.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Only the original opener may close this event."
+            )
+        already_closed = await AuditLog.find_one(
+            {"event_type": "record_view_closed", "metadata_payload.open_event_id": str(open_log.id)}
+        )
+        if already_closed is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This open event is already closed.")
+
+        duration_seconds = round((datetime.now(timezone.utc) - open_log.created_at).total_seconds())
+        return await self.record(
+            event_type="record_view_closed",
+            actor_id=actor.id,
+            actor_role=actor.role,
+            target_entity_type=open_log.target_entity_type,
+            target_entity_id=open_log.target_entity_id,
+            summary_message=open_log.summary_message,
+            metadata_payload={"open_event_id": str(open_log.id), "duration_seconds": duration_seconds},
+        )
         return record
 
     async def search(

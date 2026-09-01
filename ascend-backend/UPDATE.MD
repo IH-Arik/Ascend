@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-09-01, how long someone actually stood there, without erasing the moment they arrived
+
+One column in a visitor log had always been left blank in spirit even while showing a number — how long each visit had lasted. Everything else in that log was real: who came, when, what they touched. Only the length of the stay had nothing real behind it.
+
+Before reaching for the obvious fix — write the length onto the visitor's own original entry once they left — stopped and read the rule this particular book had always followed, stated plainly on its own first page: an entry, once written, is never changed and never erased. Writing a departure time onto an arrival entry would have broken that promise quietly, the kind of small violation nobody notices until the day it matters.
+
+Said so out loud before touching anything, rather than either breaking the rule silently or refusing the request outright. Chosen answer: keep the promise. An arrival gets its own line, permanent, untouched forever after. A departure gets its own separate, new line — never written into the old one — and that new line does the arithmetic itself, comparing its own real moment to the real moment already written down at arrival, and only then states, honestly, how long the gap between the two truly was.
+
+Two small real guards came with it, once the shape existed: only the person who actually arrived may write that they left — nobody else gets to close a door they never opened. And a door, once closed, stays closed — asking to close it twice is refused the second time, not silently accepted.
+
+Proved it the only way that means anything: arrived for real, let five real seconds pass, then left for real — and the number that came back was five, because it had actually been five, not because anything was told to say so. Tried to leave the same door a second time and was correctly stopped. Had someone else — a genuinely different, second real visitor — try to close the first one's door, and was correctly turned away. And a second, smaller fabrication sitting right next to the real one — a note claiming a body-composition scan that was never actually taken anywhere in this system — was looked at plainly, named for what it was, and set down rather than built.
+
 ## 2026-09-01, a second door, the same missing room, and a decision not to build the room twice
 
 Walked into a second, neighboring wing of the same building, expecting it to be its own place. It mostly was. But one thing already noticed once, in the first wing's own logbook, had no bearing on this second wing's own pie-chart wall of neat percentages, still standing there with nothing real behind it — recognized on sight this time, as the same familiar picture already refused once before, and left refused a second time without needing to ask again.

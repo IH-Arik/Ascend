@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
 from app.core import database as database_module
 from app.core.config import get_settings
@@ -52,6 +52,7 @@ from app.schemas.equipment_gap import EquipmentGapCreate, EquipmentGapUpdate
 from app.schemas.idmt_handoff import IdmtHandoffBatchCreateRequest, IdmtHandoffCreateRequest
 from app.schemas.leave_record import LeaveRecordCreate
 from app.schemas.org_unit import OrgUnitCreate
+from app.schemas.audit_log import AuditLogOpenEventRequest
 from app.schemas.specialist_session import SpecialistSessionCreate, SpecialistSessionUpdate
 from app.schemas.pt_session import PTSessionAttendeeAdd, PTSessionCreate, PTSessionUpdate
 from app.schemas.provider_credential import CredentialCreate
@@ -245,6 +246,30 @@ async def get_audit_log_stats(
     """24h/7d totals, real % vs 7d average, real 24h medical-record-access count."""
     data = await audit_log_service.get_stats()
     return success_response("Audit log stats loaded successfully.", data)
+
+
+@router.post("/audit-log/open", status_code=status.HTTP_201_CREATED, summary="Log the start of a real record-view session")
+async def open_audit_log_event(
+    payload: AuditLogOpenEventRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Any authenticated staff member may open a real, immutable view-tracking event."""
+    record = await audit_log_service.open_event(
+        current_user, payload.target_entity_type, payload.target_entity_id, payload.summary_message
+    )
+    return success_response("Open event logged successfully.", {"id": str(record.id)})
+
+
+@router.post("/audit-log/{open_event_id}/close", status_code=status.HTTP_200_OK, summary="Log the real duration of a view session")
+async def close_audit_log_event(
+    open_event_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Only the original opener may close their own open event; a real, server-computed duration."""
+    record = await audit_log_service.close_event(current_user, open_event_id)
+    return success_response(
+        "Close event logged successfully.", {"id": str(record.id), "duration_seconds": record.metadata_payload["duration_seconds"]}
+    )
 
 
 @router.websocket("/audit-log/live")
