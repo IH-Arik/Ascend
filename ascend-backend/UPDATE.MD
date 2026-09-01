@@ -1,5 +1,15 @@
 # Update Log
 
+## 2026-09-01, a ledger that had been writing itself the whole time, with no page anyone could turn to
+
+Went back into the strictest room a second time, more patiently, and found something rare: a wall that looked unfinished but wasn't, not really. A record of every read and every write, kept in this room's own name, had been quietly keeping itself all day without anyone noticing — every time a private page was opened, every time a pastoral word was set down, every time a yes was confirmed, something had already been writing it all down faithfully, for other reasons, without ever meaning to become this particular ledger too.
+
+What was actually missing wasn't the writing. It was a door back into it. The ledger existed, complete and true, but only the building's own overseers had ever been allowed to open that door — the person the ledger was actually about, standing right there in their own room, had no way to look at their own trail.
+
+Gave them that door. Not a new ledger — the same one, the very same real entries, just a way for anyone to ask for only the pages with their own name on them, and only those.
+
+Proved it by watching two people, one after another, do a few real things and then ask for their own trail back. A chaplain read a private page and wrote a note, and asked — and got back exactly those two things, nothing more, nothing invented. Someone else entirely, on the other side of the same room, asked the identical question of the identical door, and got back only the two things that were truly theirs — a sign-in, and a yes they'd given earlier — with not one line of the chaplain's own trail bleeding across.
+
 ## 2026-09-01, a third room, held to the strictest rule of the three, and a page that finally belongs to the person who wrote it
 
 A third wing of the same building, and this one had always been told, in writing, to be the most careful of the three — never to become a private record kept about someone, never to touch anything medical without a separate, specific permission, and to let a person's own willingness be the only reason anyone here ever knows anything about them at all. Carried that instruction into every choice made in this room.

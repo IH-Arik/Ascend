@@ -154,6 +154,22 @@ class AuditLogService:
         )
         return record
 
+    async def search_own(
+        self, actor: User, event_type: str | None = None, page: int = 1, page_size: int = 50
+    ) -> dict[str, Any]:
+        """A real 'my own recent actions' log - any staff member's own real audit trail.
+
+        Real, added 2026-09-01 - the Chaplain dashboard's "Records access
+        log" widget (Read/Write/Confirmed rows, one per real prior action)
+        turned out to already be fully backed - `reflections_viewed`
+        (`ReflectionService.list_for_user`), `specialist_note_created`, and
+        `support_pathway_toggle`/`support_pathway_witnessed_opt_in` were all
+        already being logged for other reasons. The only real gap was that
+        `search` was Admin-only - a specialist had no way to see their own
+        trail. This is that real, self-scoped view.
+        """
+        return await self.search(event_type=event_type, page=page, page_size=page_size, actor_id=actor.id)
+
     async def search(
         self,
         actor_role: str | None = None,
@@ -163,9 +179,17 @@ class AuditLogService:
         query: str | None = None,
         page: int = 1,
         page_size: int = 50,
+        actor_id: Any | None = None,
     ) -> dict[str, Any]:
-        """Real filter/search/paginate over `AuditLog` - no fabricated fields."""
+        """Real filter/search/paginate over `AuditLog` - no fabricated fields.
+
+        `actor_id` added 2026-09-01 - backs a real "my own recent actions"
+        view (see `search_own`) distinct from the Admin-only org-wide
+        `actor_role` filter above.
+        """
         filters = []
+        if actor_id is not None:
+            filters.append(AuditLog.actor_id == actor_id)
         if actor_role:
             filters.append(AuditLog.actor_role == actor_role)
         if event_type:

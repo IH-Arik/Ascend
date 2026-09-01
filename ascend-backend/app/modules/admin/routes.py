@@ -248,6 +248,18 @@ async def get_audit_log_stats(
     return success_response("Audit log stats loaded successfully.", data)
 
 
+@router.get("/audit-log/mine", summary="Search my own real recent actions")
+async def search_own_audit_log(
+    event_type: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    current_user: User = Depends(get_current_user),
+):
+    """Any authenticated staff member's own real audit trail - not org-wide search."""
+    data = await audit_log_service.search_own(current_user, event_type, page, page_size)
+    return success_response("Your recent actions loaded successfully.", data)
+
+
 @router.post("/audit-log/open", status_code=status.HTTP_201_CREATED, summary="Log the start of a real record-view session")
 async def open_audit_log_event(
     payload: AuditLogOpenEventRequest,
