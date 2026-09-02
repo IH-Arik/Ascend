@@ -69,8 +69,19 @@ async def init_db() -> None:
         return
 
     settings = get_settings()
+    # Real, raised from 2000ms 2026-09-02 - the tight 2s dev-mode timeout
+    # was intermittently losing the race against real connection latency
+    # on this machine. Directly measured with a real ping: the actual
+    # Atlas connection genuinely takes ~8s here (DNS SRV + TCP + TLS +
+    # auth combined), not a DNS-only issue - a real env condition, not a
+    # code bug, but the fixed value was far too tight for it. Once
+    # init_db fails there is no retry for the rest of the process's life
+    # (see is_database_connected), so losing this race even once means a
+    # full backend restart to recover.
+    timeout_ms = 30000 if settings.db_required else 40000
     client_options: dict[str, object] = {
-        "serverSelectionTimeoutMS": 30000 if settings.db_required else 2000,
+        "serverSelectionTimeoutMS": timeout_ms,
+        "connectTimeoutMS": timeout_ms,
         # Without this, datetimes read back from MongoDB are naive (UTC-implied,
         # no tzinfo), while every datetime created in this app is timezone-aware
         # (datetime.now(timezone.utc)). Mixing the two raises TypeError on any
@@ -85,64 +96,122 @@ async def init_db() -> None:
     database = client[settings.mongodb_db_name]
 
     try:
-        await init_beanie(
-            database=database,
-            document_models=[
-                User,
-                AppSetting,
-                AIInsight,
-                OnboardingAnswer,
-                CheckinAnswer,
-                OpsSnapshot,
-                Recommendation,
-                Reflection,
-                SupportRequest,
-                Notification,
-                OFTRecord,
-                Assessment,
-                WorkoutLog,
-                Message,
-                AuditLog,
-                TeamAssignment,
-                DeactivationRequest,
-                ReconditioningPlan,
-                MedicalRecord,
-                MedicalRecordAccessEvent,
-                EmergencyContactConfig,
-                ProviderCredential,
-                EquipmentGap,
-                UtilizationEvent,
-                CoverageLog,
-                PTSession,
-                SpecialistSession,
-                LeaveRecord,
-                ScoringConfig,
-                ReportExport,
-                PathwayApproval,
-                PendingConfirmation,
-                SchedulerJobRun,
-                OrgUnit,
-                RoleScopeConfig,
-                ScheduledExport,
-                RecommendationThresholdConfig,
-                MessageThread,
-                LeadershipAnnotation,
-                Briefing,
-                IdmtHandoff,
-                RomMeasurement,
-                ReconditioningEvent,
-                Restriction,
-                PerformanceSummary,
-                QuestionBankVersion,
-                SpecialistNote,
-            ],
-        )
-    except Exception:
+        if settings.db_required:
+            await init_beanie(
+                database=database,
+                document_models=[
+                    User,
+                    AppSetting,
+                    AIInsight,
+                    OnboardingAnswer,
+                    CheckinAnswer,
+                    OpsSnapshot,
+                    Recommendation,
+                    Reflection,
+                    SupportRequest,
+                    Notification,
+                    OFTRecord,
+                    Assessment,
+                    WorkoutLog,
+                    Message,
+                    AuditLog,
+                    TeamAssignment,
+                    DeactivationRequest,
+                    ReconditioningPlan,
+                    MedicalRecord,
+                    MedicalRecordAccessEvent,
+                    EmergencyContactConfig,
+                    ProviderCredential,
+                    EquipmentGap,
+                    UtilizationEvent,
+                    CoverageLog,
+                    PTSession,
+                    SpecialistSession,
+                    LeaveRecord,
+                    ScoringConfig,
+                    ReportExport,
+                    PathwayApproval,
+                    PendingConfirmation,
+                    SchedulerJobRun,
+                    OrgUnit,
+                    RoleScopeConfig,
+                    ScheduledExport,
+                    RecommendationThresholdConfig,
+                    MessageThread,
+                    LeadershipAnnotation,
+                    Briefing,
+                    IdmtHandoff,
+                    RomMeasurement,
+                    ReconditioningEvent,
+                    Restriction,
+                    PerformanceSummary,
+                    QuestionBankVersion,
+                    SpecialistNote,
+                ],
+            )
+        else:
+            import asyncio
+            await asyncio.wait_for(
+                init_beanie(
+                    database=database,
+                    document_models=[
+                        User,
+                        AppSetting,
+                        AIInsight,
+                        OnboardingAnswer,
+                        CheckinAnswer,
+                        OpsSnapshot,
+                        Recommendation,
+                        Reflection,
+                        SupportRequest,
+                        Notification,
+                        OFTRecord,
+                        Assessment,
+                        WorkoutLog,
+                        Message,
+                        AuditLog,
+                        TeamAssignment,
+                        DeactivationRequest,
+                        ReconditioningPlan,
+                        MedicalRecord,
+                        MedicalRecordAccessEvent,
+                        EmergencyContactConfig,
+                        ProviderCredential,
+                        EquipmentGap,
+                        UtilizationEvent,
+                        CoverageLog,
+                        PTSession,
+                        SpecialistSession,
+                        LeaveRecord,
+                        ScoringConfig,
+                        ReportExport,
+                        PathwayApproval,
+                        PendingConfirmation,
+                        SchedulerJobRun,
+                        OrgUnit,
+                        RoleScopeConfig,
+                        ScheduledExport,
+                        RecommendationThresholdConfig,
+                        MessageThread,
+                        LeadershipAnnotation,
+                        Briefing,
+                        IdmtHandoff,
+                        RomMeasurement,
+                        ReconditioningEvent,
+                        Restriction,
+                        PerformanceSummary,
+                        QuestionBankVersion,
+                        SpecialistNote,
+                    ],
+                ),
+                timeout=45.0,
+            )
+    except Exception as e:
         await close_db()
         if settings.db_required:
             raise
         logger.warning(
-            "MongoDB is unavailable. Ascend will continue without database connectivity."
+            f"MongoDB is unavailable ({e}). Ascend will continue without database connectivity."
         )
 
 
