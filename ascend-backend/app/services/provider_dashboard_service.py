@@ -233,35 +233,43 @@ class ProviderDashboardService:
         """
         is_admin_view = provider.role in ADMIN_ROLES
         user_ids = await self._assigned_user_ids(None if is_admin_view else provider.id, "PT/IM")
-        rows = []
-        for user_id in user_ids:
-            user = await User.get(user_id)
-            if user is None:
-                continue
-            reconditioning = await self.reconditioning_service.get_for_user(user_id)
-            recent_workouts = await self._recent_workouts(user_id)
-            pending_records = await MedicalRecord.find(
-                MedicalRecord.user_id == user_id, MedicalRecord.status == "pending"
-            ).to_list()
-
-            rows.append(
-                {
-                    "user_id": str(user_id),
-                    "user_name": user.full_name,
-                    "reconditioning_phase": reconditioning.get("phase"),
-                    "ptim_clearance_status": reconditioning.get("ptim_clearance_status"),
-                    "injury_flags": reconditioning.get("injury_flags"),
-                    "next_review_date": reconditioning.get("next_review_date"),
-                    "reported_limitation_recent": any(w.reported_limitation for w in recent_workouts),
-                    "pending_medical_record_reviews": len(pending_records),
-                }
-            )
+        # Same fix as get_scs_dashboard: each user's row needs 4 sequential
+        # DB round trips (User.get, reconditioning lookup, recent workouts,
+        # pending records) - looping `await` one user at a time turned this
+        # into O(users x 4) round trips - 27.5s for 23 operators on this
+        # network. Building all rows concurrently collapses that to ~4
+        # round-trip *rounds* total, run in parallel across users.
+        maybe_rows = await asyncio.gather(*(self._build_ptim_row(user_id) for user_id in user_ids))
+        rows = [row for row in maybe_rows if row is not None]
 
         return {
             "assigned_count": len(rows),
             "active_reconditioning_count": sum(1 for r in rows if r["reconditioning_phase"] is not None),
             "pending_review_total": sum(r["pending_medical_record_reviews"] for r in rows),
             "operators": rows,
+        }
+
+    async def _build_ptim_row(self, user_id: Any) -> dict[str, Any] | None:
+        """Build one PT/IM dashboard operator row - the per-user body of get_ptim_dashboard's old loop."""
+        user = await User.get(user_id)
+        if user is None:
+            return None
+
+        reconditioning, recent_workouts, pending_records = await asyncio.gather(
+            self.reconditioning_service.get_for_user(user_id),
+            self._recent_workouts(user_id),
+            MedicalRecord.find(MedicalRecord.user_id == user_id, MedicalRecord.status == "pending").to_list(),
+        )
+
+        return {
+            "user_id": str(user_id),
+            "user_name": user.full_name,
+            "reconditioning_phase": reconditioning.get("phase"),
+            "ptim_clearance_status": reconditioning.get("ptim_clearance_status"),
+            "injury_flags": reconditioning.get("injury_flags"),
+            "next_review_date": reconditioning.get("next_review_date"),
+            "reported_limitation_recent": any(w.reported_limitation for w in recent_workouts),
+            "pending_medical_record_reviews": len(pending_records),
         }
 
     async def get_specialist_dashboard(self, provider: User) -> dict[str, Any]:
@@ -286,25 +294,16 @@ class ProviderDashboardService:
         requests.sort(key=lambda r: r.created_at, reverse=True)
 
         today = date.today()
-        rows = []
-        for user_id in user_ids:
-            user = await User.get(user_id)
-            if user is None:
-                continue
-            active_recommendation = await self._active_recommendation(user_id, specialist_route=pathway_key)
-            user_requests = [r for r in requests if r.user_id == user_id]
-            row = {
-                "user_id": str(user_id),
-                "user_name": user.full_name,
-                "relevant_component_score": (
-                    (user.current_component_scores or {}).get(component) if component else None
-                ),
-                "assigned_action_title": active_recommendation.title if active_recommendation else None,
-                "latest_request_status": user_requests[0].status if user_requests else None,
-            }
-            if pathway_key == ROLE_NUTRITIONIST:
-                row["nutrition_signals"] = await self._build_nutrition_signals(user_id, today)
-            rows.append(row)
+        # Same fix as get_scs_dashboard/get_ptim_dashboard: build every
+        # user's row concurrently instead of awaiting each user's 2-3
+        # sequential DB round trips one user at a time.
+        maybe_rows = await asyncio.gather(
+            *(
+                self._build_specialist_row(user_id, pathway_key, component, requests, today)
+                for user_id in user_ids
+            )
+        )
+        rows = [row for row in maybe_rows if row is not None]
 
         return {
             "pathway_key": pathway_key,
@@ -336,6 +335,42 @@ class ProviderDashboardService:
                 for r in requests[:10]
             ],
         }
+
+    async def _build_specialist_row(
+        self,
+        user_id: Any,
+        pathway_key: str,
+        component: str | None,
+        requests: list[SupportRequest],
+        today: date,
+    ) -> dict[str, Any] | None:
+        """Build one specialist-dashboard operator row - the per-user body of get_specialist_dashboard's old loop."""
+        user = await User.get(user_id)
+        if user is None:
+            return None
+
+        if pathway_key == ROLE_NUTRITIONIST:
+            active_recommendation, nutrition_signals = await asyncio.gather(
+                self._active_recommendation(user_id, specialist_route=pathway_key),
+                self._build_nutrition_signals(user_id, today),
+            )
+        else:
+            active_recommendation = await self._active_recommendation(user_id, specialist_route=pathway_key)
+            nutrition_signals = None
+
+        user_requests = [r for r in requests if r.user_id == user_id]
+        row: dict[str, Any] = {
+            "user_id": str(user_id),
+            "user_name": user.full_name,
+            "relevant_component_score": (
+                (user.current_component_scores or {}).get(component) if component else None
+            ),
+            "assigned_action_title": active_recommendation.title if active_recommendation else None,
+            "latest_request_status": user_requests[0].status if user_requests else None,
+        }
+        if pathway_key == ROLE_NUTRITIONIST:
+            row["nutrition_signals"] = nutrition_signals
+        return row
 
     async def _build_nutrition_signals(self, user_id: Any, today: date) -> dict[str, Any]:
         """Real meal-consistency/hydration signals from `CheckinAnswer` (Nutritionist-only).

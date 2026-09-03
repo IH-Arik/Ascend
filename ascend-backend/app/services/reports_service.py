@@ -116,11 +116,19 @@ class ReportsService:
             workouts_by_user[workout.user_id] = workouts_by_user.get(workout.user_id, 0) + 1
 
         relevant_user_ids = {p.user_id for p in plans} | set(workouts_by_user.keys())
+        # Was `await User.get(user_id)` once per relevant user in this loop
+        # - O(users) sequential round trips. One $in query plus Python
+        # dicts (also replacing the O(users) linear scan through `plans`
+        # per user) does the same real lookups from data already fetched
+        # above, in one round trip.
+        users = await User.find({"_id": {"$in": list(relevant_user_ids)}}).to_list()
+        users_by_id = {u.id: u for u in users}
+        plans_by_user_id = {p.user_id: p for p in plans}
         rows = []
         severity_breakdown: dict[str, int] = {}
         for user_id in relevant_user_ids:
-            user = await User.get(user_id)
-            plan = next((p for p in plans if p.user_id == user_id), None)
+            user = users_by_id.get(user_id)
+            plan = plans_by_user_id.get(user_id)
             days_out = (
                 (date.today() - plan.injury_reported_on).days
                 if plan and plan.injury_reported_on and plan.phase != "completed"
@@ -203,9 +211,21 @@ class ReportsService:
         all_plans = await ReconditioningPlan.find().to_list()
         plans_by_user_id: dict[str, ReconditioningPlan] = {str(p.user_id): p for p in all_plans}
 
+        # Was `await User.find(unit_id == X)` once per flight in the loop
+        # below - O(flights) sequential round trips. One $in query plus a
+        # Python group-by does the same real per-flight member lookup in
+        # one round trip (same fix already applied to
+        # LeadershipAggregateService._members_by_flight).
+        flight_ids = [str(f.id) for f in flights]
+        all_members = await User.find({"unit_id": {"$in": flight_ids}}).to_list()
+        members_by_flight: dict[str, list[User]] = {fid: [] for fid in flight_ids}
+        for member in all_members:
+            if member.unit_id in members_by_flight:
+                members_by_flight[member.unit_id].append(member)
+
         flight_rows: list[dict[str, Any]] = []
         for flight in flights:
-            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            members = members_by_flight[str(flight.id)]
             cohort_size = len(members)
             if cohort_size < cohort_k:
                 continue
@@ -261,10 +281,12 @@ class ReportsService:
         implied - each quarter is a real, closed calendar window (see
         `fiscal_quarter_bounds`), not a rolling window relabeled 4 times.
         """
-        quarters = []
-        for q in (1, 2, 3, 4):
-            data = await self.get_injury_report_by_flight(fiscal_year=fiscal_year, quarter=q)
-            quarters.append({"quarter": q, **data})
+        # The 4 quarters are independent of each other - gather instead of
+        # awaiting one at a time.
+        results = await asyncio.gather(
+            *(self.get_injury_report_by_flight(fiscal_year=fiscal_year, quarter=q) for q in (1, 2, 3, 4))
+        )
+        quarters = [{"quarter": q, **data} for q, data in zip((1, 2, 3, 4), results)]
         return {"fiscal_year": fiscal_year, "quarters": quarters}
 
     async def get_injury_type_breakdown(
