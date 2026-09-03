@@ -50,6 +50,7 @@ from app.models.user import User
 from app.models.workout_log import WorkoutLog
 from app.services.admin_confirmation_service import AdminConfirmationService
 from app.services.credential_service import CredentialService
+from app.services.medical_record_service import MedicalRecordService
 from app.services.oft_service import OFTService
 from app.services.reconditioning_service import ReconditioningService
 from app.services.reports_service import ReportsService
@@ -109,6 +110,7 @@ class ProviderDashboardService:
         self.credential_service = CredentialService()
         self.admin_confirmation_service = AdminConfirmationService()
         self.role_admin_service = RoleAdminService()
+        self.medical_record_service = MedicalRecordService()
 
     async def get_scs_dashboard(self, provider: User) -> dict[str, Any]:
         """SCS Dashboard - who checked in, low OPS, missed workouts, referral/reconditioning need.
@@ -270,6 +272,24 @@ class ProviderDashboardService:
             "next_review_date": reconditioning.get("next_review_date"),
             "reported_limitation_recent": any(w.reported_limitation for w in recent_workouts),
             "pending_medical_record_reviews": len(pending_records),
+            # Full pending-record detail (not just the count above) so the
+            # PT/IM records tab can render a real caseload-wide review
+            # queue - GET /records/uploads is self-scoped to the caller and
+            # can never show this, see the route's own docstring.
+            "pending_records": [
+                self.medical_record_service._serialize_list_item(r) for r in pending_records
+            ],
+            # Real reconditioning-plan fields the row previously fetched
+            # but never returned - the SCS/coordination tab needs these to
+            # show real per-operator coordination status instead of the
+            # self-scoped (and therefore always-empty-for-staff)
+            # /recommendations/active endpoint it was calling before.
+            "scs_coordination_status": reconditioning.get("scs_coordination_status"),
+            "scs_coordination_label": reconditioning.get("scs_coordination_label"),
+            "severity_level": reconditioning.get("severity_level"),
+            "rehab_strategy_summary": reconditioning.get("rehab_strategy_summary"),
+            "sessions_completed": reconditioning.get("sessions_completed"),
+            "sessions_total": reconditioning.get("sessions_total"),
         }
 
     async def get_specialist_dashboard(self, provider: User) -> dict[str, Any]:
