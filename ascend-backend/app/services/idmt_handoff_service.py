@@ -172,13 +172,30 @@ class IdmtHandoffService:
         all_handoffs = await IdmtHandoff.find(IdmtHandoff.recipient_role == ROLE_IDMT).to_list()
         handoffs = [h for h in all_handoffs if h.status in ("transmitted", "acknowledged")]
         handoffs.sort(key=lambda h: h.prepared_date, reverse=True)
-        return {"handoffs": [await self._serialize(h) for h in handoffs]}
+        return {"handoffs": await self._serialize_many(handoffs)}
 
     async def list_all(self) -> dict[str, Any]:
         """Admin view - every handoff regardless of status."""
         handoffs = await IdmtHandoff.find().to_list()
         handoffs.sort(key=lambda h: h.prepared_date, reverse=True)
-        return {"handoffs": [await self._serialize(h) for h in handoffs]}
+        return {"handoffs": await self._serialize_many(handoffs)}
+
+    async def _serialize_many(self, handoffs: list[IdmtHandoff]) -> list[dict[str, Any]]:
+        """Serialize a list of handoffs with one batched User lookup instead of the
+        3 sequential `User.get` calls `_serialize` makes per handoff - was an N+1
+        (up to 3N round trips) on every list call.
+        """
+        if not handoffs:
+            return []
+        user_ids = set()
+        for h in handoffs:
+            user_ids.add(h.user_id)
+            user_ids.add(h.prepared_by)
+            if h.acknowledged_by:
+                user_ids.add(h.acknowledged_by)
+        users = await User.find({"_id": {"$in": list(user_ids)}}).to_list()
+        users_by_id = {u.id: u for u in users}
+        return [await self._serialize(h, users_by_id=users_by_id) for h in handoffs]
 
     async def download(self, viewer: User, handoff_id: str) -> tuple[bytes, str]:
         """Render the real summary content - never raw MedicalRecord bytes."""
@@ -263,10 +280,17 @@ class IdmtHandoffService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Handoff not found.")
         return handoff
 
-    async def _serialize(self, handoff: IdmtHandoff) -> dict[str, Any]:
-        target = await User.get(handoff.user_id)
-        preparer = await User.get(handoff.prepared_by)
-        acknowledger = await User.get(handoff.acknowledged_by) if handoff.acknowledged_by else None
+    async def _serialize(
+        self, handoff: IdmtHandoff, *, users_by_id: dict[Any, User] | None = None
+    ) -> dict[str, Any]:
+        if users_by_id is not None:
+            target = users_by_id.get(handoff.user_id)
+            preparer = users_by_id.get(handoff.prepared_by)
+            acknowledger = users_by_id.get(handoff.acknowledged_by) if handoff.acknowledged_by else None
+        else:
+            target = await User.get(handoff.user_id)
+            preparer = await User.get(handoff.prepared_by)
+            acknowledger = await User.get(handoff.acknowledged_by) if handoff.acknowledged_by else None
         return {
             "id": str(handoff.id),
             "user_id": str(handoff.user_id),
