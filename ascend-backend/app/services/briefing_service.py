@@ -13,6 +13,7 @@ language with no real backing ("recovery signal", "FY-quarter comparison",
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 from typing import Any
 
@@ -215,7 +216,15 @@ class BriefingService:
                 )
             resolved_recipients.append(normalize_role(role))
 
-        record.generated_content = await self._generate_content(record.outline)
+        # Content is only regenerated here when sending straight from
+        # `draft` (the reviewer never saw a frozen version, so this *is*
+        # the freeze point). A `ready` briefing already had its content
+        # frozen by submit_for_review - regenerating it here used to
+        # silently discard whatever the reviewer actually approved and
+        # replace it with fresh content nobody reviewed, on top of costing
+        # another full section-generation pass for no reason.
+        if record.status == "draft":
+            record.generated_content = await self._generate_content(record.outline)
         record.status = "sent"
         record.recipient_roles = resolved_recipients
         record.sent_at = utc_now()
@@ -269,15 +278,23 @@ class BriefingService:
         return self.report_export_service.render_prose_pdf(data["title"], f"Status: {data['status']}", sections)
 
     async def _generate_content(self, outline: list[dict[str, Any]]) -> dict[str, str]:
-        """Real: resolve each section's real data, then generate real prose for it."""
-        content: dict[str, str] = {}
-        for item in outline:
-            section_key = item["section_key"]
+        """Real: resolve each section's real data, then generate real prose for it.
+
+        Each section is independent of every other (its data resolver and
+        its Claude call don't consume any other section's result) -
+        awaiting them one at a time was the real reason this took 30-40s+
+        for a 5-section outline. Gathering them concurrently doesn't
+        change what's queried/generated, just stops serializing
+        independent work.
+        """
+        async def build_section(section_key: str) -> tuple[str, str]:
             section_data = await self._get_section_data(section_key)
-            content[section_key] = await self.ai_insights_service.generate_briefing_section_narrative(
-                section_key, section_data
-            )
-        return content
+            narrative = await self.ai_insights_service.generate_briefing_section_narrative(section_key, section_data)
+            return section_key, narrative
+
+        section_keys = [item["section_key"] for item in outline]
+        results = await asyncio.gather(*(build_section(key) for key in section_keys))
+        return dict(results)
 
     async def _get_section_data(self, section_key: str) -> dict[str, Any]:
         """Real per-section data resolver - each branch calls an already-real, already-verified method."""
