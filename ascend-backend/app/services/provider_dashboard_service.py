@@ -18,6 +18,7 @@ the pathway key directly.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 from typing import Any
 
@@ -126,65 +127,24 @@ class ProviderDashboardService:
         scope_config = await self.role_admin_service.get_scope_config(provider.role)
         visible_components = scope_config["visible_components"]
         today = date.today()
-        rows = []
-        checked_in_count = 0
-        low_ops_count = 0
 
-        for user_id in user_ids:
-            user = await User.get(user_id)
-            if user is None:
-                continue
-            checked_in_today = (
-                await CheckinAnswer.find_one(
-                    CheckinAnswer.user_id == user_id,
-                    CheckinAnswer.cadence == "daily",
-                    CheckinAnswer.checkin_date == today,
-                )
-                is not None
-            )
-            if checked_in_today:
-                checked_in_count += 1
-            if user.current_ops_score is not None and user.current_ops_score < LOW_OPS_THRESHOLD:
-                low_ops_count += 1
-
-            recent_workouts = await self._recent_workouts(user_id)
-            oft_status = await self.oft_service.get_status_for_user(user)
-            reconditioning = await self.reconditioning_service.get_for_user(user_id)
-            active_recommendation = await self._active_recommendation(user_id)
-            ptim_referral = await self._latest_request_status(user_id, "PT/IM")
-
-            rows.append(
-                {
-                    "user_id": str(user_id),
-                    "user_name": user.full_name,
-                    "current_ops_score": user.current_ops_score,
-                    "current_ops_band": user.current_ops_band,
-                    "physical_readiness": (
-                        (user.current_component_scores or {}).get("Physical Readiness")
-                        if "Physical Readiness" in visible_components
-                        else None
-                    ),
-                    "sleep_readiness": (
-                        (user.current_component_scores or {}).get("Sleep Readiness")
-                        if "Sleep Readiness" in visible_components
-                        else None
-                    ),
-                    "checked_in_today": checked_in_today,
-                    "missed_workouts_recent": sum(
-                        1 for w in recent_workouts if w.completion_status == "missed"
-                    ),
-                    "reported_limitation_recent": any(w.reported_limitation for w in recent_workouts),
-                    "oft_status": oft_status["current_status"],
-                    "reconditioning_active": reconditioning["available"],
-                    "active_risk_flag": active_recommendation.title if active_recommendation else None,
-                    # Real L0-L5 escalation level (DOCX Table 20,
-                    # `app/core/routing_levels.py`) already computed on the
-                    # active recommendation - `None` (L0/no flag) when there
-                    # isn't one. Not a fabricated per-component chip.
-                    "driver_flag": active_recommendation.route_level if active_recommendation else None,
-                    "ptim_referral_status": ptim_referral,
-                }
-            )
+        # Each user's row needs ~7 sequential DB round trips (User.get,
+        # checkin lookup, recent workouts, OFT status, reconditioning,
+        # active recommendation, PT/IM referral). Looping `await` one user
+        # at a time turned this into O(users x 7) round trips - 52s for a
+        # handful of operators on this network. Building all rows
+        # concurrently via gather collapses that to ~7 round-trip *rounds*
+        # total, run in parallel across users.
+        maybe_rows = await asyncio.gather(
+            *(self._build_scs_row(user_id, visible_components, today) for user_id in user_ids)
+        )
+        rows = [row for row in maybe_rows if row is not None]
+        checked_in_count = sum(1 for row in rows if row["checked_in_today"])
+        low_ops_count = sum(
+            1
+            for row in rows
+            if row["current_ops_score"] is not None and row["current_ops_score"] < LOW_OPS_THRESHOLD
+        )
 
         return {
             "assigned_count": len(rows),
@@ -192,6 +152,59 @@ class ProviderDashboardService:
             "missed_checkin_today_count": len(rows) - checked_in_count,
             "low_ops_count": low_ops_count,
             "operators": rows,
+        }
+
+    async def _build_scs_row(
+        self, user_id: Any, visible_components: list[str], today: date
+    ) -> dict[str, Any] | None:
+        """Build one SCS dashboard operator row - the per-user body of get_scs_dashboard's old loop."""
+        user = await User.get(user_id)
+        if user is None:
+            return None
+
+        checked_in_today, recent_workouts, oft_status, reconditioning, active_recommendation, ptim_referral = (
+            await asyncio.gather(
+                CheckinAnswer.find_one(
+                    CheckinAnswer.user_id == user_id,
+                    CheckinAnswer.cadence == "daily",
+                    CheckinAnswer.checkin_date == today,
+                ),
+                self._recent_workouts(user_id),
+                self.oft_service.get_status_for_user(user),
+                self.reconditioning_service.get_for_user(user_id),
+                self._active_recommendation(user_id),
+                self._latest_request_status(user_id, "PT/IM"),
+            )
+        )
+        checked_in_today = checked_in_today is not None
+
+        return {
+            "user_id": str(user_id),
+            "user_name": user.full_name,
+            "current_ops_score": user.current_ops_score,
+            "current_ops_band": user.current_ops_band,
+            "physical_readiness": (
+                (user.current_component_scores or {}).get("Physical Readiness")
+                if "Physical Readiness" in visible_components
+                else None
+            ),
+            "sleep_readiness": (
+                (user.current_component_scores or {}).get("Sleep Readiness")
+                if "Sleep Readiness" in visible_components
+                else None
+            ),
+            "checked_in_today": checked_in_today,
+            "missed_workouts_recent": sum(1 for w in recent_workouts if w.completion_status == "missed"),
+            "reported_limitation_recent": any(w.reported_limitation for w in recent_workouts),
+            "oft_status": oft_status["current_status"],
+            "reconditioning_active": reconditioning["available"],
+            "active_risk_flag": active_recommendation.title if active_recommendation else None,
+            # Real L0-L5 escalation level (DOCX Table 20,
+            # `app/core/routing_levels.py`) already computed on the
+            # active recommendation - `None` (L0/no flag) when there
+            # isn't one. Not a fabricated per-component chip.
+            "driver_flag": active_recommendation.route_level if active_recommendation else None,
+            "ptim_referral_status": ptim_referral,
         }
 
     async def get_ptim_dashboard(self, provider: User) -> dict[str, Any]:
