@@ -512,23 +512,45 @@ class ProviderDashboardService:
         cohort_k = (await self.role_admin_service.get_scope_config(ROLE_NUTRITIONIST))["cohort_k"]
         flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
         today = date.today()
+        cutoff = today - timedelta(days=NUTRITION_SIGNAL_WINDOW_DAYS)
         open_requests = await SupportRequest.find(
             SupportRequest.pathway_key == ROLE_NUTRITIONIST, SupportRequest.status == "open"
         ).to_list()
         requester_ids_pending = {r.user_id for r in open_requests}
 
+        # Batched via a single $in query instead of the per-flight
+        # User.find(...) this used to run - same fix as
+        # reports_service.get_injury_report_by_flight's member lookup.
+        flight_ids = [str(f.id) for f in flights]
+        all_members = await User.find({"unit_id": {"$in": flight_ids}}).to_list()
+        members_by_flight: dict[str, list[User]] = {fid: [] for fid in flight_ids}
+        for member in all_members:
+            if member.unit_id in members_by_flight:
+                members_by_flight[member.unit_id].append(member)
+
+        # Batched via a single $in query instead of one CheckinAnswer.find
+        # per member inside the per-flight loop - the worst N+1 (nested,
+        # O(flights x members)) found in this codebase this session.
+        all_answers = await CheckinAnswer.find(
+            {"user_id": {"$in": [m.id for m in all_members]}, "checkin_date": {"$gte": cutoff}}
+        ).to_list()
+        flagged_counts_by_user: dict[Any, int] = {}
+        for answer in all_answers:
+            if (
+                answer.question_code in NUTRITION_SIGNAL_QUESTION_CODES
+                and answer.raw_score_1_to_4 is not None
+                and answer.raw_score_1_to_4 <= 2
+            ):
+                flagged_counts_by_user[answer.user_id] = flagged_counts_by_user.get(answer.user_id, 0) + 1
+
         flight_rows: list[dict[str, Any]] = []
         for flight in flights:
-            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            members = members_by_flight.get(str(flight.id), [])
             cohort_size = len(members)
             if cohort_size < cohort_k:
                 continue
 
-            flagged_members = 0
-            for member in members:
-                signals = await self._build_nutrition_signals(member.id, today)
-                if signals["skipped_meals_or_low_hydration_flags_60d"] > 0:
-                    flagged_members += 1
+            flagged_members = sum(1 for m in members if flagged_counts_by_user.get(m.id, 0) > 0)
             flagged_rate_pct = round(flagged_members / cohort_size * 100, 1)
             consistency_level = (
                 "High" if flagged_rate_pct < 20 else "Mixed" if flagged_rate_pct < 50 else "Lagging"
