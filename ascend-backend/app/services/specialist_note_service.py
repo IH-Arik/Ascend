@@ -74,6 +74,33 @@ class SpecialistNoteService:
         notes.sort(key=lambda n: n.created_at, reverse=True)
         return {"notes": [await self._serialize(n, viewer=viewer) for n in notes]}
 
+    async def list_for_caseload(self, viewer: User, user_ids: list[Any]) -> dict[str, Any]:
+        """Real notes across every user in the caller's caseload, pathway-siloed unless Admin.
+
+        Batches both the note query and the authoring-specialist lookups
+        via single `$in` queries - same batch-then-group-by pattern used
+        for reports_service's per-flight member lookups - instead of the
+        N+1 a per-user loop (or a per-note `_serialize` call, which already
+        does its own `User.get`) would cause.
+        """
+        if not user_ids:
+            return {"notes": []}
+        notes = await SpecialistNote.find({"user_id": {"$in": list(user_ids)}}).to_list()
+        if viewer.role not in ADMIN_ROLES:
+            notes = [n for n in notes if n.specialist_type == viewer.role]
+        notes.sort(key=lambda n: n.created_at, reverse=True)
+
+        specialist_ids = {n.specialist_id for n in notes}
+        specialists = await User.find({"_id": {"$in": list(specialist_ids)}}).to_list()
+        specialists_by_id = {s.id: s for s in specialists}
+
+        return {
+            "notes": [
+                await self._serialize(n, viewer=viewer, specialist=specialists_by_id.get(n.specialist_id))
+                for n in notes
+            ]
+        }
+
     async def update_status(self, actor: User, note_id: str, new_status: str) -> dict[str, Any]:
         """Only the authoring specialist or Admin may update a note's status."""
         record = await self._get_or_404(note_id)
@@ -158,8 +185,11 @@ class SpecialistNoteService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found.")
         return record
 
-    async def _serialize(self, record: SpecialistNote, *, viewer: User) -> dict[str, Any]:
-        specialist = await User.get(record.specialist_id)
+    async def _serialize(
+        self, record: SpecialistNote, *, viewer: User, specialist: User | None | str = "__unset__"
+    ) -> dict[str, Any]:
+        if specialist == "__unset__":
+            specialist = await User.get(record.specialist_id)
         # Redacted for anyone who isn't the authoring specialist - including
         # Admin, matching the mock's own "redacted by default... require
         # explicit access with reason" language, which doesn't exempt

@@ -55,6 +55,7 @@ from app.services.oft_service import OFTService
 from app.services.reconditioning_service import ReconditioningService
 from app.services.reports_service import ReportsService
 from app.services.role_admin_service import RoleAdminService
+from app.services.specialist_note_service import SpecialistNoteService
 from app.services.utilization_service import UtilizationService
 
 LOW_OPS_THRESHOLD = 55.0
@@ -111,6 +112,7 @@ class ProviderDashboardService:
         self.admin_confirmation_service = AdminConfirmationService()
         self.role_admin_service = RoleAdminService()
         self.medical_record_service = MedicalRecordService()
+        self.specialist_note_service = SpecialistNoteService()
 
     async def get_scs_dashboard(self, provider: User) -> dict[str, Any]:
         """SCS Dashboard - who checked in, low OPS, missed workouts, referral/reconditioning need.
@@ -316,12 +318,18 @@ class ProviderDashboardService:
         today = date.today()
         # Same fix as get_scs_dashboard/get_ptim_dashboard: build every
         # user's row concurrently instead of awaiting each user's 2-3
-        # sequential DB round trips one user at a time.
-        maybe_rows = await asyncio.gather(
-            *(
-                self._build_specialist_row(user_id, pathway_key, component, requests, today)
-                for user_id in user_ids
-            )
+        # sequential DB round trips one user at a time. The caseload-wide
+        # notes fetch is already itself batched ($in query, see
+        # list_for_caseload), so it runs alongside the per-row gather
+        # rather than inside it.
+        maybe_rows, notes_data = await asyncio.gather(
+            asyncio.gather(
+                *(
+                    self._build_specialist_row(user_id, pathway_key, component, requests, today)
+                    for user_id in user_ids
+                )
+            ),
+            self.specialist_note_service.list_for_caseload(provider, user_ids),
         )
         rows = [row for row in maybe_rows if row is not None]
 
@@ -344,6 +352,9 @@ class ProviderDashboardService:
                 else None
             ),
             "operators": rows,
+            # Real, caseload-wide specialist notes (pathway-siloed to the
+            # caller) - see SpecialistNoteService.list_for_caseload.
+            "notes": notes_data["notes"],
             "recent_requests": [
                 {
                     "id": str(r.id),
@@ -452,17 +463,16 @@ class ProviderDashboardService:
             }
 
         cutoff = date.today() - timedelta(days=MENTAL_DRIVER_WINDOW_DAYS)
-        checkin_answers: list[Any] = []
-        onboarding_answers: list[Any] = []
-        for user_id in user_ids:
-            checkin_answers.extend(
-                await CheckinAnswer.find(
-                    CheckinAnswer.user_id == user_id, CheckinAnswer.checkin_date >= cutoff
-                ).to_list()
-            )
-            onboarding_answers.extend(
-                await OnboardingAnswer.find(OnboardingAnswer.user_id == user_id).to_list()
-            )
+        # Batched via single $in queries instead of the per-user loop this
+        # used to run - same N+1 fix as get_scs_dashboard/get_ptim_dashboard
+        # elsewhere in this file, just for a cohort aggregate instead of a
+        # per-operator row.
+        checkin_answers, onboarding_answers = await asyncio.gather(
+            CheckinAnswer.find(
+                {"user_id": {"$in": list(user_ids)}, "checkin_date": {"$gte": cutoff}}
+            ).to_list(),
+            OnboardingAnswer.find({"user_id": {"$in": list(user_ids)}}).to_list(),
+        )
         scores_by_code: dict[str, list[float]] = {}
         for answer in (*checkin_answers, *onboarding_answers):
             if answer.scoreable and answer.numeric_score_100 is not None:
