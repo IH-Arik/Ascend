@@ -1166,6 +1166,27 @@ async def get_scs_weekly_availability(
     return success_response("SCS weekly availability loaded successfully.", data)
 
 
+@router.get("/coverage/schedule-vs-worked", summary="Real scheduled-vs-worked hours summary for one role/year")
+async def get_schedule_vs_worked(
+    role: str,
+    year: int,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
+):
+    """SCS or Admin views real scheduled-vs-worked coverage hours for one role/year."""
+    data = await coverage_service.get_schedule_vs_worked_summary(role, year)
+    return success_response("Schedule vs worked summary loaded successfully.", data)
+
+
+@router.get("/coverage/rsd-summary", summary="Real RSD weekend-coverage hours summary for one year")
+async def get_rsd_summary(
+    year: int,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
+):
+    """SCS or Admin views the real RSD coverage summary for one year (also in /admin/system/overview, Admin-only)."""
+    data = await coverage_service.get_rsd_summary(year)
+    return success_response("RSD summary loaded successfully.", data)
+
+
 # --- Admin-configurable OPS scoring weights/thresholds ---
 
 
