@@ -28,6 +28,7 @@ as DOCX-backed.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 from typing import Any
 
@@ -84,16 +85,45 @@ class LeadershipAggregateService:
         scope_config = await self.role_admin_service.get_scope_config(ROLE_LEADERSHIP)
         return scope_config["cohort_k"]
 
+    async def _members_by_flight(self, flights: list[OrgUnit]) -> dict[str, list[User]]:
+        """Return every flight's real members, grouped, from one bulk query.
+
+        get_flight_comparison/get_risk_heatmap/get_recovery_program_summary
+        each used to run `User.find(User.unit_id == str(flight.id))` once
+        per flight in a loop - O(flights) sequential round trips on a slow
+        connection. One `$in` query plus a Python group-by does the same
+        real lookup in a single round trip.
+        """
+        flight_ids = [str(f.id) for f in flights]
+        members = await User.find({"unit_id": {"$in": flight_ids}}).to_list()
+        grouped: dict[str, list[User]] = {fid: [] for fid in flight_ids}
+        for member in members:
+            if member.unit_id in grouped:
+                grouped[member.unit_id].append(member)
+        return grouped
+
     async def get_flight_comparison(self) -> dict[str, Any]:
         """Real per-flight OPS comparison, k-gated - never a per-operator list."""
         cohort_k = await self._get_cohort_k()
         flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
-        monthly_trend = await self.get_monthly_trend(months=2)
+        # members_by_flight, the top-level monthly_trend, and each flight's
+        # own 2-month trend are all independent of each other - previously
+        # awaited one at a time (members per flight in a loop, then a
+        # second get_monthly_trend call per flight in the same loop),
+        # O(flights) sequential round-trip chains on a slow connection.
+        # Fetching/gathering them concurrently instead doesn't change what's
+        # queried, just stops serializing independent work.
+        members_by_flight, monthly_trend, flight_trends = await asyncio.gather(
+            self._members_by_flight(flights),
+            self.get_monthly_trend(months=2),
+            asyncio.gather(*(self.get_monthly_trend(months=2, unit_id=str(f.id)) for f in flights)),
+        )
         by_month = monthly_trend["months"]
+        trend_by_flight_id = {str(f.id): t for f, t in zip(flights, flight_trends)}
 
         rows: list[dict[str, Any]] = []
         for flight in flights:
-            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            members = members_by_flight[str(flight.id)]
             cohort_size = len(members)
             if cohort_size < cohort_k:
                 continue
@@ -101,8 +131,7 @@ class LeadershipAggregateService:
             ops_scores = [m.current_ops_score for m in members if m.current_ops_score is not None]
             average_ops_score = round(sum(ops_scores) / len(ops_scores), 2) if ops_scores else None
 
-            flight_trend = await self.get_monthly_trend(months=2, unit_id=str(flight.id))
-            flight_months = flight_trend["months"]
+            flight_months = trend_by_flight_id[str(flight.id)]["months"]
             mom_delta = None
             if len(flight_months) >= 2 and flight_months[-1]["average_ops_score"] is not None:
                 mom_delta = round(
@@ -136,10 +165,11 @@ class LeadershipAggregateService:
         """Real per-flight x per-driver score band, k-gated per flight."""
         cohort_k = await self._get_cohort_k()
         flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
+        members_by_flight = await self._members_by_flight(flights)
 
         rows: list[dict[str, Any]] = []
         for flight in flights:
-            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            members = members_by_flight[str(flight.id)]
             cohort_size = len(members)
             suppressed = cohort_size < cohort_k
 
@@ -194,13 +224,16 @@ class LeadershipAggregateService:
         """
         cohort_k = await self._get_cohort_k()
         flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
-        active_plans = await ReconditioningPlan.find(ReconditioningPlan.phase != "completed").to_list()
+        members_by_flight, active_plans = await asyncio.gather(
+            self._members_by_flight(flights),
+            ReconditioningPlan.find(ReconditioningPlan.phase != "completed").to_list(),
+        )
         plans_by_user_id = {p.user_id: p for p in active_plans}
 
         today = date.today()
         rows: list[dict[str, Any]] = []
         for flight in flights:
-            members = await User.find(User.unit_id == str(flight.id)).to_list()
+            members = members_by_flight[str(flight.id)]
             cohort_size = len(members)
             if cohort_size < cohort_k:
                 continue
@@ -483,11 +516,20 @@ class LeadershipAggregateService:
         }
 
     async def get_aggregate_view(self) -> dict[str, Any]:
-        """Compose the full real Leadership "Aggregate readiness" response."""
-        monthly_trend = await self.get_monthly_trend(months=12)
-        flight_comparison = await self.get_flight_comparison()
-        risk_heatmap = await self.get_risk_heatmap()
-        recovery_program_summary = await self.get_recovery_program_summary()
+        """Compose the full real Leadership "Aggregate readiness" response.
+
+        The 4 sub-views below are independent of each other (none consumes
+        another's result) - awaiting them one at a time turned this into 4
+        sequential round-trip chains on a slow connection. Run them
+        concurrently instead; same real data, same DB reads, just not
+        serialized.
+        """
+        monthly_trend, flight_comparison, risk_heatmap, recovery_program_summary = await asyncio.gather(
+            self.get_monthly_trend(months=12),
+            self.get_flight_comparison(),
+            self.get_risk_heatmap(),
+            self.get_recovery_program_summary(),
+        )
 
         latest_month = monthly_trend["months"][-1] if monthly_trend["months"] else None
         return {
