@@ -158,6 +158,56 @@ class AIInsightsService:
             logger.warning("Claude briefing-narrative call failed; falling back to stub.", exc_info=True)
             return stub
 
+    async def generate_review_narrative(self, review_data: dict[str, Any]) -> str:
+        """Turn one Airman's real 30-day monthly-review data into a short first-person-addressed narrative.
+
+        Reuses the exact real pattern `generate_briefing_section_narrative`
+        already uses (same `AsyncAnthropic` construction, same API-key
+        presence check, same `_strip_json_code_fence` fix, same
+        try/except -> stub fallback) - a new call site/prompt speaking to
+        the Airman directly rather than to a commander about a cohort.
+        """
+        settings = get_settings()
+        stub = self._build_review_stub(review_data)
+        if not settings.ai_provider_api_key:
+            return stub
+
+        client = AsyncAnthropic(api_key=settings.ai_provider_api_key)
+        try:
+            response = await client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=300,
+                temperature=0,
+                system=(
+                    "You are Ascend's monthly review writer, speaking directly "
+                    "to the Airman whose real 30-day readiness data is given as "
+                    "JSON. Write one short, encouraging, factual paragraph "
+                    "(2-4 sentences) summarizing their month and one concrete "
+                    "suggestion. Return only valid JSON with exactly one key: "
+                    "narrative. Never invent a number not present in the input."
+                ),
+                messages=[{"role": "user", "content": json.dumps(review_data, ensure_ascii=True)}],
+            )
+            text = "".join(
+                block.text for block in response.content if getattr(block, "type", "") == "text"
+            ).strip()
+            parsed = json.loads(self._strip_json_code_fence(text))
+            narrative = parsed.get("narrative") if isinstance(parsed, dict) else None
+            return narrative or stub
+        except Exception:
+            logger.warning("Claude review-narrative call failed; falling back to stub.", exc_info=True)
+            return stub
+
+    def _build_review_stub(self, data: dict[str, Any]) -> str:
+        """Real deterministic fallback sentence for the monthly review narrative."""
+        score = data.get("average_ops_score")
+        delta = data.get("average_ops_delta")
+        cadence = data.get("daily_checkins", {}).get("cadence_percent")
+        score_text = "unavailable" if score is None else f"{score}"
+        delta_text = "" if not delta else f" ({delta:+.1f} vs prior 30 days)"
+        cadence_text = "" if cadence is None else f" Daily check-in cadence was {cadence}%."
+        return f"Average OPS this period was {score_text}{delta_text}.{cadence_text}"
+
     def _build_section_stub(self, section_key: str, data: dict[str, Any]) -> str:
         """Real deterministic fallback sentence for one briefing section, built from real numbers."""
         if section_key == "mission_context":

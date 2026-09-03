@@ -1157,6 +1157,15 @@ async def get_reconditioning_load_by_flight(
     return success_response("Reconditioning load by flight loaded successfully.", data)
 
 
+@router.get("/coverage/scs-weekly-availability", summary="Real SCS coverage-hours matrix for the current week")
+async def get_scs_weekly_availability(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
+):
+    """SCS or Admin views the real current-week SCS coverage-hours matrix."""
+    data = await coverage_service.get_scs_weekly_availability()
+    return success_response("SCS weekly availability loaded successfully.", data)
+
+
 # --- Admin-configurable OPS scoring weights/thresholds ---
 
 

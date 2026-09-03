@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from beanie import PydanticObjectId
@@ -166,6 +166,51 @@ class CoverageService:
             "total_flights": len(flights),
             "flights_meeting_cohort_minimum": len(rows),
             "flights": rows,
+        }
+
+    async def get_scs_weekly_availability(self) -> dict[str, Any]:
+        """Real SCS coverage-hours matrix for the current Mon-Sun week.
+
+        Built from real `CoverageLog` entries only - a provider/day cell is
+        the real hours logged that day (0.0, not "unavailable", when a
+        provider simply hasn't logged anything for that day yet; there is
+        no separate "scheduled off" tracking to distinguish the two).
+        """
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+
+        providers = await User.find(User.role == ROLE_SCS, User.is_active == True).to_list()  # noqa: E712
+        provider_ids = [p.id for p in providers]
+        logs = await CoverageLog.find(
+            {
+                "provider_id": {"$in": provider_ids},
+                "coverage_date": {"$gte": week_start, "$lte": week_end},
+            }
+        ).to_list()
+
+        by_provider: dict[PydanticObjectId, dict[str, float]] = {p.id: {} for p in providers}
+        for log in logs:
+            day_key = log.coverage_date.isoformat()
+            by_provider[log.provider_id][day_key] = by_provider[log.provider_id].get(day_key, 0.0) + log.hours
+
+        day_keys = [(week_start + timedelta(days=i)).isoformat() for i in range(7)]
+        rows = [
+            {
+                "provider_id": str(provider.id),
+                "provider_name": provider.full_name,
+                "days": {day: by_provider[provider.id].get(day, 0.0) for day in day_keys},
+                "week_total_hours": round(sum(by_provider[provider.id].values()), 1),
+            }
+            for provider in providers
+        ]
+        rows.sort(key=lambda item: item["provider_name"])
+
+        return {
+            "week_start": week_start.isoformat(),
+            "week_end": week_end.isoformat(),
+            "day_keys": day_keys,
+            "providers": rows,
         }
 
     async def export_prs_evidence(self, year: int) -> list[dict[str, Any]]:

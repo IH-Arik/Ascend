@@ -146,11 +146,26 @@ class ProviderDashboardService:
             if row["current_ops_score"] is not None and row["current_ops_score"] < LOW_OPS_THRESHOLD
         )
 
+        # Real caseload-snapshot aggregates (SCS Overview "Flight snapshot"
+        # panel) - reuses the rows already built above (no extra per-user
+        # round trips) plus one bulk OFTRecord query. No "+N this month"/
+        # "+N since Mon" trend deltas are computed - no historical snapshot
+        # of these counts is stored anywhere to diff against, so those
+        # deltas from the old mock are dropped rather than fabricated.
+        oft_cleared_today_count = await OFTRecord.find(
+            {"user_id": {"$in": user_ids}, "test_date": today, "pass_fail": "pass"}
+        ).count()
+        reconditioning_awaiting_review_count = sum(
+            1 for row in rows if row["ptim_clearance_status"] == "pending_review"
+        )
+
         return {
             "assigned_count": len(rows),
             "checked_in_today_count": checked_in_count,
             "missed_checkin_today_count": len(rows) - checked_in_count,
             "low_ops_count": low_ops_count,
+            "oft_cleared_today_count": oft_cleared_today_count,
+            "reconditioning_awaiting_review_count": reconditioning_awaiting_review_count,
             "operators": rows,
         }
 
@@ -198,6 +213,7 @@ class ProviderDashboardService:
             "reported_limitation_recent": any(w.reported_limitation for w in recent_workouts),
             "oft_status": oft_status["current_status"],
             "reconditioning_active": reconditioning["available"],
+            "ptim_clearance_status": reconditioning.get("ptim_clearance_status"),
             "active_risk_flag": active_recommendation.title if active_recommendation else None,
             # Real L0-L5 escalation level (DOCX Table 20,
             # `app/core/routing_levels.py`) already computed on the

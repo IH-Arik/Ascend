@@ -42,6 +42,7 @@ class MonthlyReviewResponse(BaseModel):
     thirty_day_recap: list[dict[str, Any]]
     average_ops_score: float | None
     average_ops_delta: float | None
+    ai_narrative: str
     daily_checkins: DailyCheckinRecap
     workout_summary: dict[str, Any]
     oft_status: dict[str, Any]

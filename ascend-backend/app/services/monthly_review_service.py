@@ -17,6 +17,7 @@ from app.models.checkin_answer import CheckinAnswer
 from app.models.message import Message
 from app.models.ops_snapshot import OpsSnapshot
 from app.models.user import User
+from app.services.ai_insights_service import AIInsightsService
 from app.services.dashboard_service import DashboardService
 from app.services.oft_service import OFTService
 from app.services.workout_service import WorkoutService
@@ -33,6 +34,7 @@ class MonthlyReviewService:
         self.dashboard_service = DashboardService()
         self.oft_service = OFTService()
         self.workout_service = WorkoutService()
+        self.ai_insights_service = AIInsightsService()
 
     async def generate(self, user: User) -> dict[str, Any]:
         """Build the monthly review for the trailing 30-day window."""
@@ -59,6 +61,16 @@ class MonthlyReviewService:
         oft_status = await self.oft_service.get_status_for_user(user)
         provider_notes = await self._recent_provider_notes(user)
 
+        review_data = {
+            "period_label": today.strftime("%B %Y"),
+            "average_ops_score": average_ops_score,
+            "average_ops_delta": average_ops_delta,
+            "daily_checkins": daily_checkins,
+            "workout_summary": workout_summary,
+            "oft_status": oft_status,
+        }
+        ai_narrative = await self.ai_insights_service.generate_review_narrative(review_data)
+
         return {
             "review_status": "draft",
             "period_label": today.strftime("%B %Y"),
@@ -68,6 +80,7 @@ class MonthlyReviewService:
             "thirty_day_recap": thirty_day_recap,
             "average_ops_score": average_ops_score,
             "average_ops_delta": average_ops_delta,
+            "ai_narrative": ai_narrative,
             "daily_checkins": daily_checkins,
             "workout_summary": workout_summary,
             "oft_status": oft_status,
