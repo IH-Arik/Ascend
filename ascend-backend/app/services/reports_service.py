@@ -10,6 +10,7 @@ fabricated - each report method's docstring says what's included and why.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 from typing import Any
 
@@ -418,11 +419,13 @@ class ReportsService:
         year = year or date.today().year
         providers = await User.find().to_list()
         providers = [u for u in providers if u.role in PRS_TARGET_HOURS]
+        totals_by_provider = await self.coverage_service.total_hours_by_provider(
+            [p.id for p in providers], year
+        )
 
         provider_rows = []
         for provider in providers:
-            hours = await self.coverage_service.total_hours_for_provider(provider.id, year)
-            rsd_hours = await self.coverage_service.total_rsd_hours_for_provider(provider.id, year)
+            hours, rsd_hours = totals_by_provider[provider.id]
             target = PRS_TARGET_HOURS[provider.role]
             coverage_pct = round(hours / target * 100, 1) if target else 0.0
             provider_rows.append(
@@ -438,8 +441,10 @@ class ReportsService:
                 }
             )
 
-        assessment_compliance = await self.get_assessment_completion_report()
-        rsd_coverage = await self.coverage_service.get_rsd_summary(year)
+        assessment_compliance, rsd_coverage = await asyncio.gather(
+            self.get_assessment_completion_report(),
+            self.coverage_service.get_rsd_summary(year),
+        )
         return {
             "year": year,
             "providers": provider_rows,

@@ -6,6 +6,7 @@ router, different code folder, so the two concepts never get mixed in the
 codebase even though both mount under the shared `/api/v1` prefix.
 """
 
+import asyncio
 from datetime import date, timedelta
 from typing import Any
 
@@ -123,13 +124,29 @@ async def get_leadership_aggregate(
     quarter_start_month = ((today.month - 1) // 3) * 3 + 1
     quarter_start = date(today.year, quarter_start_month, 1)
 
-    aggregate = await leadership_aggregate_service.get_aggregate_view()
-    prs_qcp = await reports_service.get_prs_qcp_report(year=today.year)
-    feedback_sessions = await reports_service.get_feedback_session_summary(quarter_start, today)
-    oft_metrics = await oft_service.get_leadership_metrics_report()
-    oft_due_soon = await oft_service.get_due_soon_count(days=30)
-    scs_hours = await coverage_service.get_schedule_vs_worked_summary(ROLE_SCS, today.year)
-    ptim_hours = await coverage_service.get_schedule_vs_worked_summary(ROLE_PTIM, today.year)
+    # All 7 calls below are independent of each other (none consumes
+    # another's result - prs_qcp's 3 sub-fields are just read out after it
+    # resolves). Awaiting them one at a time made this route the real
+    # source of the 30+s load, on top of get_aggregate_view's own
+    # already-fixed internal N+1. Gathering them concurrently doesn't
+    # change what's queried, just stops serializing independent work.
+    (
+        aggregate,
+        prs_qcp,
+        feedback_sessions,
+        oft_metrics,
+        oft_due_soon,
+        scs_hours,
+        ptim_hours,
+    ) = await asyncio.gather(
+        leadership_aggregate_service.get_aggregate_view(),
+        reports_service.get_prs_qcp_report(year=today.year),
+        reports_service.get_feedback_session_summary(quarter_start, today),
+        oft_service.get_leadership_metrics_report(),
+        oft_service.get_due_soon_count(days=30),
+        coverage_service.get_schedule_vs_worked_summary(ROLE_SCS, today.year),
+        coverage_service.get_schedule_vs_worked_summary(ROLE_PTIM, today.year),
+    )
 
     return success_response(
         "Leadership aggregate readiness loaded successfully.",

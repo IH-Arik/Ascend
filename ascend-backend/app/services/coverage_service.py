@@ -79,6 +79,29 @@ class CoverageService:
         records = await CoverageLog.find(CoverageLog.provider_id == _as_object_id(provider_id)).to_list()
         return sum(r.hours for r in records if r.coverage_date.year == year and r.is_weekend_rsd)
 
+    async def total_hours_by_provider(self, provider_ids: list[Any], year: int) -> dict[Any, tuple[float, float]]:
+        """Batched (total_hours, rsd_hours) for many providers/one year in a single query.
+
+        `get_prs_qcp_report` used to call `total_hours_for_provider` +
+        `total_rsd_hours_for_provider` per provider - 2 round trips per
+        provider (each independently re-fetching the same records) times
+        every SCS/PT-IM provider in the system. One `$in` query plus a
+        Python group-by computes both real totals for every provider from
+        a single fetch.
+        """
+        object_ids = [_as_object_id(pid) for pid in provider_ids]
+        records = await CoverageLog.find({"provider_id": {"$in": object_ids}}).to_list()
+        totals: dict[Any, tuple[float, float]] = {pid: (0.0, 0.0) for pid in object_ids}
+        for record in records:
+            if record.coverage_date.year != year:
+                continue
+            hours, rsd_hours = totals[record.provider_id]
+            hours += record.hours
+            if record.is_weekend_rsd:
+                rsd_hours += record.hours
+            totals[record.provider_id] = (hours, rsd_hours)
+        return totals
+
     async def get_rsd_summary(self, year: int) -> dict[str, Any]:
         """Return real RSD coverage hours across every provider, for one calendar year."""
         all_logs = await CoverageLog.find().to_list()
