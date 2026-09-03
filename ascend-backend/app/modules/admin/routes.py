@@ -704,9 +704,15 @@ async def prepare_idmt_handoff_batch(
 
 @router.get("/idmt-handoffs", summary="List IDMT documentation handoffs")
 async def list_idmt_handoffs(
-    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_IDMT)),
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_IDMT, ROLE_PTIM)),
 ):
-    """IDMT sees only transmitted/acknowledged handoffs; Admin sees every status."""
+    """IDMT sees only transmitted/acknowledged handoffs; PT/IM and Admin see every status.
+
+    PT/IM can already prepare and transmit handoffs (both routes above allow
+    ROLE_PTIM) - this route was the one outlier still 403ing them, which
+    broke their whole PT/IM dashboard (a single Promise.all failure on the
+    frontend fails every tab, not just the handoff one).
+    """
     data = (
         await idmt_handoff_service.list_for_idmt()
         if current_user.role == ROLE_IDMT
