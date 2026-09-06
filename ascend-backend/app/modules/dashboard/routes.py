@@ -265,6 +265,7 @@ async def use_report_template(
         report_type=template["report_type"],
         export_format=template["export_format"],
         cadence=template["cadence"],
+        recipient_role=current_user.role,
     )
     data = await scheduled_export_service.create(current_user, payload)
     return success_response("Scheduled export created from template successfully.", data)
