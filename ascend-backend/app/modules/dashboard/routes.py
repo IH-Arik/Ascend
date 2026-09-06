@@ -26,7 +26,7 @@ from app.core.roles import (
 from app.models.user import User
 from app.schemas.briefing import BriefingCreateRequest, BriefingOutlineUpdateRequest, BriefingSendRequest
 from app.schemas.leadership_annotation import LeadershipAnnotationCreate
-from app.schemas.scheduled_export import ScheduledExportCreate
+from app.schemas.scheduled_export import ReportTemplateUseRequest, ScheduledExportCreate
 from app.services.briefing_service import BRIEFING_TEMPLATES, BriefingService
 from app.services.coverage_service import CoverageService
 from app.services.leadership_aggregate_service import LeadershipAggregateService
@@ -250,18 +250,22 @@ async def list_report_templates(
 @router.post("/leadership/report-templates/{template_key}/use", status_code=status.HTTP_201_CREATED)
 async def use_report_template(
     template_key: str,
+    body: ReportTemplateUseRequest | None = None,
     current_user: User = Depends(require_roles(*LEADERSHIP_ROLES)),
 ) -> dict[str, Any]:
     """Real "Use" action - creates a real recurring `ScheduledExport` from a template's defaults.
 
     Reuses `ScheduledExportService.create` directly (same validation, same
-    audit logging) rather than a parallel implementation.
+    audit logging) rather than a parallel implementation. An optional body
+    can override the schedule's name; the template still governs
+    report_type/export_format/cadence.
     """
     template = REPORT_TEMPLATES.get(template_key)
     if template is None:
         return success_response("Unknown template.", {"allowed": list(REPORT_TEMPLATES.keys())})
+    custom_name = body.name.strip() if body and body.name else None
     payload = ScheduledExportCreate(
-        name=template["title"],
+        name=custom_name or template["title"],
         report_type=template["report_type"],
         export_format=template["export_format"],
         cadence=template["cadence"],

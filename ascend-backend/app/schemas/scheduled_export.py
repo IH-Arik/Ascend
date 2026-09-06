@@ -19,6 +19,17 @@ class ScheduledExportCreate(BaseModel):
     recipient_role: str = Field(min_length=1, max_length=80)
 
 
+class ReportTemplateUseRequest(BaseModel):
+    """Leadership "Use" action on a report template - optional title override.
+
+    The template itself still supplies `report_type`/`export_format`/`cadence`;
+    this only lets the caller rename the resulting schedule instead of always
+    getting the template's default title.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+
+
 class ScheduledExportUpdate(BaseModel):
     """Admin edits a real recurring export schedule - only the fields given are changed.
 
