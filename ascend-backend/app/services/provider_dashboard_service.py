@@ -585,7 +585,27 @@ class ProviderDashboardService:
         level" principle as `DashboardService.get_unit_report` - Leadership
         is authorized for aggregate views, never a per-operator score list.
         """
-        operators = await User.find(User.role == "Airman").to_list()
+        # The 6 real reads below are independent of each other - previously
+        # awaited one at a time, chaining 6 round trips on a slow connection.
+        # Gathering them concurrently doesn't change what's queried, just
+        # stops serializing independent work (same fix pattern already
+        # applied to LeadershipAggregateService.get_aggregate_view).
+        (
+            operators,
+            oft_records,
+            support_requests,
+            utilization,
+            assessment_completion,
+            recent_exports,
+        ) = await asyncio.gather(
+            User.find(User.role == "Airman").to_list(),
+            OFTRecord.find().to_list(),
+            SupportRequest.find().to_list(),
+            self.utilization_service.list_recent(90),
+            self.reports_service.get_assessment_completion_report(),
+            ReportExport.find().to_list(),
+        )
+
         ops_scores = [u.current_ops_score for u in operators if u.current_ops_score is not None]
         average_ops_score = round(sum(ops_scores) / len(ops_scores), 2) if ops_scores else None
 
@@ -603,18 +623,14 @@ class ProviderDashboardService:
             ]
             component_averages[component] = round(sum(values) / len(values), 2) if values else None
 
-        oft_records = await OFTRecord.find().to_list()
         oft_status_counts: dict[str, int] = {}
         for record in oft_records:
             oft_status_counts[record.status] = oft_status_counts.get(record.status, 0) + 1
 
         support_by_pathway: dict[str, int] = {}
-        for request in await SupportRequest.find().to_list():
+        for request in support_requests:
             support_by_pathway[request.pathway_key] = support_by_pathway.get(request.pathway_key, 0) + 1
 
-        utilization = await self.utilization_service.list_recent(90)
-        assessment_completion = await self.reports_service.get_assessment_completion_report()
-        recent_exports = await ReportExport.find().to_list()
         recent_exports.sort(key=lambda r: r.created_at, reverse=True)
 
         return {

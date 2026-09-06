@@ -184,9 +184,12 @@ async def get_leadership_trends(
     period_end = date.today()
     period_start = period_end - timedelta(days=PERIOD_TO_DAYS[period])
 
-    trend = await leadership_aggregate_service.get_period_trend(period)
-    band_distribution = await leadership_aggregate_service.get_band_distribution_trend()
-    annotations = await leadership_annotation_service.list_for_period(period_start, period_end)
+    cohort_k = await leadership_aggregate_service.get_cohort_k()
+    trend, band_distribution, annotations = await asyncio.gather(
+        leadership_aggregate_service.get_period_trend(period, cohort_k=cohort_k),
+        leadership_aggregate_service.get_band_distribution_trend(cohort_k=cohort_k),
+        leadership_annotation_service.list_for_period(period_start, period_end),
+    )
 
     return success_response(
         "Leadership trends loaded successfully.",

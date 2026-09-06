@@ -85,6 +85,15 @@ class LeadershipAggregateService:
         scope_config = await self.role_admin_service.get_scope_config(ROLE_LEADERSHIP)
         return scope_config["cohort_k"]
 
+    async def get_cohort_k(self) -> int:
+        """Public alias of `_get_cohort_k` for callers outside this service.
+
+        Lets a route resolve it once and thread it into several otherwise-
+        independent calls (see `get_leadership_trends`) instead of each one
+        re-fetching the same never-changes-mid-request value.
+        """
+        return await self._get_cohort_k()
+
     async def _members_by_flight(self, flights: list[OrgUnit]) -> dict[str, list[User]]:
         """Return every flight's real members, grouped, from one bulk query.
 
@@ -102,9 +111,10 @@ class LeadershipAggregateService:
                 grouped[member.unit_id].append(member)
         return grouped
 
-    async def get_flight_comparison(self) -> dict[str, Any]:
+    async def get_flight_comparison(self, cohort_k: int | None = None) -> dict[str, Any]:
         """Real per-flight OPS comparison, k-gated - never a per-operator list."""
-        cohort_k = await self._get_cohort_k()
+        if cohort_k is None:
+            cohort_k = await self._get_cohort_k()
         flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
         # members_by_flight, the top-level monthly_trend, and each flight's
         # own 2-month trend are all independent of each other - previously
@@ -112,11 +122,13 @@ class LeadershipAggregateService:
         # second get_monthly_trend call per flight in the same loop),
         # O(flights) sequential round-trip chains on a slow connection.
         # Fetching/gathering them concurrently instead doesn't change what's
-        # queried, just stops serializing independent work.
+        # queried, just stops serializing independent work. Passing the
+        # already-resolved cohort_k down also saves a redundant
+        # `_get_cohort_k()` round trip inside every one of those calls.
         members_by_flight, monthly_trend, flight_trends = await asyncio.gather(
             self._members_by_flight(flights),
-            self.get_monthly_trend(months=2),
-            asyncio.gather(*(self.get_monthly_trend(months=2, unit_id=str(f.id)) for f in flights)),
+            self.get_monthly_trend(months=2, cohort_k=cohort_k),
+            asyncio.gather(*(self.get_monthly_trend(months=2, unit_id=str(f.id), cohort_k=cohort_k) for f in flights)),
         )
         by_month = monthly_trend["months"]
         trend_by_flight_id = {str(f.id): t for f, t in zip(flights, flight_trends)}
@@ -161,9 +173,10 @@ class LeadershipAggregateService:
             "reference_months": [m["month"] for m in by_month],
         }
 
-    async def get_risk_heatmap(self) -> dict[str, Any]:
+    async def get_risk_heatmap(self, cohort_k: int | None = None) -> dict[str, Any]:
         """Real per-flight x per-driver score band, k-gated per flight."""
-        cohort_k = await self._get_cohort_k()
+        if cohort_k is None:
+            cohort_k = await self._get_cohort_k()
         flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
         members_by_flight = await self._members_by_flight(flights)
 
@@ -206,7 +219,7 @@ class LeadershipAggregateService:
         rows.sort(key=lambda item: item["flight_name"])
         return {"min_cohort_size": cohort_k, "flights": rows}
 
-    async def get_recovery_program_summary(self) -> dict[str, Any]:
+    async def get_recovery_program_summary(self, cohort_k: int | None = None) -> dict[str, Any]:
         """Real per-flight active-reconditioning caseload, k-gated - the "Recovery program" view.
 
         Not DOCX-sourced (a Figma Leadership screen showed a "Recovery
@@ -222,7 +235,8 @@ class LeadershipAggregateService:
         overdue `next_review_date`) - honest, not a fabricated adherence
         score.
         """
-        cohort_k = await self._get_cohort_k()
+        if cohort_k is None:
+            cohort_k = await self._get_cohort_k()
         flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
         members_by_flight, active_plans = await asyncio.gather(
             self._members_by_flight(flights),
@@ -270,7 +284,9 @@ class LeadershipAggregateService:
             "flights": rows,
         }
 
-    async def get_monthly_trend(self, months: int = 12, unit_id: str | None = None) -> dict[str, Any]:
+    async def get_monthly_trend(
+        self, months: int = 12, unit_id: str | None = None, cohort_k: int | None = None
+    ) -> dict[str, Any]:
         """Real monthly cohort OPS/component trend, k-gated per month.
 
         `unit_id`, when given, scopes the cohort to one real flight;
@@ -284,8 +300,14 @@ class LeadershipAggregateService:
         `PvP` (period-vs-period, not DOCX-sourced) is defined here plainly:
         the average of the second half of the reported window vs the
         average of the first half.
+
+        `cohort_k`, when given by a caller that already resolved it (e.g.
+        `get_flight_comparison` calling this once per flight), skips the
+        real but redundant extra `_get_cohort_k()` round trip - the value
+        can't change mid-request.
         """
-        cohort_k = await self._get_cohort_k()
+        if cohort_k is None:
+            cohort_k = await self._get_cohort_k()
         if unit_id:
             cohort_users = await User.find(User.unit_id == unit_id).to_list()
         else:
@@ -352,17 +374,20 @@ class LeadershipAggregateService:
             "pvp_delta": pvp_delta,
         }
 
-    async def get_daily_trend(self, days: int = 7, unit_id: str | None = None) -> dict[str, Any]:
+    async def get_daily_trend(
+        self, days: int = 7, unit_id: str | None = None, cohort_k: int | None = None
+    ) -> dict[str, Any]:
         """Real daily cohort OPS/component trend, k-gated per day.
 
         Same real structure as `get_monthly_trend` (see that method's
-        docstring for the cohort-resolution/k-gating/PvP-definition
-        details), just bucketed by calendar day (`OpsSnapshot.snapshot_date`)
-        instead of by month - for the Trends screen's 7d/30d period
-        selector, which `get_monthly_trend` can't serve (it only has
-        month-level granularity).
+        docstring for the cohort-resolution/k-gating/PvP-definition/
+        `cohort_k`-reuse details), just bucketed by calendar day
+        (`OpsSnapshot.snapshot_date`) instead of by month - for the Trends
+        screen's 7d/30d period selector, which `get_monthly_trend` can't
+        serve (it only has month-level granularity).
         """
-        cohort_k = await self._get_cohort_k()
+        if cohort_k is None:
+            cohort_k = await self._get_cohort_k()
         if unit_id:
             cohort_users = await User.find(User.unit_id == unit_id).to_list()
         else:
@@ -428,7 +453,9 @@ class LeadershipAggregateService:
             "pvp_delta": pvp_delta,
         }
 
-    async def get_period_trend(self, period: str = "12mo", unit_id: str | None = None) -> dict[str, Any]:
+    async def get_period_trend(
+        self, period: str = "12mo", unit_id: str | None = None, cohort_k: int | None = None
+    ) -> dict[str, Any]:
         """Real trend dispatcher for the Trends screen's period selector.
 
         Not DOCX-sourced (a Figma Leadership "Trends" screen). Routes
@@ -443,12 +470,12 @@ class LeadershipAggregateService:
 
         granularity, value = period_map[period]
         if granularity == "daily":
-            result = await self.get_daily_trend(days=value, unit_id=unit_id)
+            result = await self.get_daily_trend(days=value, unit_id=unit_id, cohort_k=cohort_k)
             return {"period": period, "granularity": "daily", **result}
-        result = await self.get_monthly_trend(months=value, unit_id=unit_id)
+        result = await self.get_monthly_trend(months=value, unit_id=unit_id, cohort_k=cohort_k)
         return {"period": period, "granularity": "monthly", **result}
 
-    async def get_band_distribution_trend(self, months: int = 2) -> dict[str, Any]:
+    async def get_band_distribution_trend(self, months: int = 2, cohort_k: int | None = None) -> dict[str, Any]:
         """Real per-band (Ready/Monitor/Caution/Action Needed/High Priority) headcount trend.
 
         Not DOCX-sourced (a Figma Leadership "Trends" screen showed a
@@ -459,7 +486,8 @@ class LeadershipAggregateService:
         real per-month average `ops_score` into a band and tallies real
         headcounts - never a fabricated 3-way collapse.
         """
-        cohort_k = await self._get_cohort_k()
+        if cohort_k is None:
+            cohort_k = await self._get_cohort_k()
         cohort_users = await User.find(User.role == ROLE_AIRMAN).to_list()
         cohort_user_ids = {u.id for u in cohort_users}
 
@@ -522,13 +550,18 @@ class LeadershipAggregateService:
         another's result) - awaiting them one at a time turned this into 4
         sequential round-trip chains on a slow connection. Run them
         concurrently instead; same real data, same DB reads, just not
-        serialized.
+        serialized. `cohort_k` is resolved once here and threaded into all
+        4 (and, transitively, into every per-flight call inside
+        `get_flight_comparison`) instead of each one re-fetching the same
+        never-changes-mid-request value - on a slow connection that
+        redundant round trip alone was multiplying by "sub-views x flights".
         """
+        cohort_k = await self._get_cohort_k()
         monthly_trend, flight_comparison, risk_heatmap, recovery_program_summary = await asyncio.gather(
-            self.get_monthly_trend(months=12),
-            self.get_flight_comparison(),
-            self.get_risk_heatmap(),
-            self.get_recovery_program_summary(),
+            self.get_monthly_trend(months=12, cohort_k=cohort_k),
+            self.get_flight_comparison(cohort_k=cohort_k),
+            self.get_risk_heatmap(cohort_k=cohort_k),
+            self.get_recovery_program_summary(cohort_k=cohort_k),
         )
 
         latest_month = monthly_trend["months"][-1] if monthly_trend["months"] else None
