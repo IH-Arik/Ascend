@@ -43,6 +43,7 @@ from app.models.question_bank_version import QuestionBankVersion
 from app.models.specialist_note import SpecialistNote
 from app.models.support_request import SupportRequest
 from app.models.team_assignment import TeamAssignment
+from app.models.training_compliance import TrainingCompliance
 from app.models.user import User
 from app.models.utilization_event import UtilizationEvent
 from app.models.workout_log import WorkoutLog
@@ -92,6 +93,7 @@ __all__ = [
     "SpecialistNote",
     "SupportRequest",
     "TeamAssignment",
+    "TrainingCompliance",
     "User",
     "UtilizationEvent",
     "WorkoutLog",

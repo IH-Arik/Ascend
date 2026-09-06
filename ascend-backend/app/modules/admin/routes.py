@@ -57,6 +57,7 @@ from app.schemas.specialist_session import SpecialistSessionCreate, SpecialistSe
 from app.schemas.pt_session import PTSessionAttendeeAdd, PTSessionCreate, PTSessionUpdate
 from app.schemas.provider_credential import CredentialCreate
 from app.schemas.question_bank_version import QuestionBankVersionCreate
+from app.schemas.training_compliance import TrainingComplianceUpsert
 from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportUpdate
 from app.schemas.recommendation_threshold_config import RecommendationThresholdConfigCreate
 from app.schemas.report_export import ReportLifecycleUpdate
@@ -80,6 +81,7 @@ from app.services.org_unit_service import OrgUnitService
 from app.services.provider_dashboard_service import ProviderDashboardService
 from app.services.question_bank_version_service import QuestionBankVersionService
 from app.services.role_admin_service import RoleAdminService
+from app.services.training_compliance_service import TrainingComplianceService
 from app.services.recommendation_threshold_config_service import (
     RecommendationThresholdConfigService,
 )
@@ -104,6 +106,7 @@ audit_log_service = AuditLogService()
 scheduled_export_service = ScheduledExportService()
 provider_dashboard_service = ProviderDashboardService()
 role_admin_service = RoleAdminService()
+training_compliance_service = TrainingComplianceService()
 credential_service = CredentialService()
 equipment_gap_service = EquipmentGapService()
 utilization_service = UtilizationService()
@@ -899,6 +902,37 @@ async def list_credentials(
     """Return every credential on file (the Admin credential dashboard)."""
     data = await credential_service.list_all()
     return success_response("Credentials loaded successfully.", data)
+
+
+# --- Staff Training Compliance (DOCX Section 14: AT Level I, OPSEC) ---
+
+
+@router.get("/training-compliance/summary", summary="Real org-wide staff training compliance status")
+async def get_training_compliance_summary(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    """The System page's "Compliance" tile - real counts, never a fabricated pass/fail."""
+    data = await training_compliance_service.get_compliance_summary()
+    return success_response("Training compliance summary loaded successfully.", data)
+
+
+@router.get("/training-compliance/{user_id}", summary="List one staff member's training compliance items")
+async def list_training_compliance(
+    user_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    data = await training_compliance_service.list_for_user(user_id)
+    return success_response("Training compliance items loaded successfully.", data)
+
+
+@router.put("/training-compliance/{user_id}", summary="Admin records or updates one training item")
+async def upsert_training_compliance(
+    user_id: str,
+    payload: TrainingComplianceUpsert,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    data = await training_compliance_service.upsert(current_user, user_id, payload)
+    return success_response("Training compliance item recorded successfully.", data)
 
 
 # --- Equipment and Supply Gap Tracker (DOCX 8.7) ---

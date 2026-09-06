@@ -52,6 +52,7 @@ from app.models import QuestionBankVersion
 from app.models import SpecialistNote
 from app.models import SupportRequest
 from app.models import TeamAssignment
+from app.models import TrainingCompliance
 from app.models import User
 from app.models import UtilizationEvent
 from app.models import WorkoutLog
@@ -116,6 +117,7 @@ async def init_db() -> None:
                     Message,
                     AuditLog,
                     TeamAssignment,
+                    TrainingCompliance,
                     DeactivationRequest,
                     ReconditioningPlan,
                     MedicalRecord,
@@ -171,6 +173,7 @@ async def init_db() -> None:
                         Message,
                         AuditLog,
                         TeamAssignment,
+                        TrainingCompliance,
                         DeactivationRequest,
                         ReconditioningPlan,
                         MedicalRecord,
