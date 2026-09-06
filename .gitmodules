@@ -1,0 +1,3 @@
+[submodule "ascend-admin"]
+	path = ascend-admin
+	url = https://github.com/iam-rajuan/ascend-admin.git

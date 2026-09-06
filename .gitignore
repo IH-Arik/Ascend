@@ -1,5 +1,7 @@
 # Ignored Projects / Folders
 wellness-backend/
+ascend-admin-637dab234594b94ee7e7cad1fa71fc421d35b7bc/
+ascend-app/
 
 # Environment & Secrets
 .env
