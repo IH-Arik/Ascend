@@ -315,6 +315,7 @@ class RoleAdminService:
         assigned_provider_pathways = [
             p["key"] for p in get_support_pathways() if p["always_available"]
         ]
+        provider_workload = await self._provider_workload_summary(users)
 
         return {
             "account_status": {
@@ -336,6 +337,7 @@ class RoleAdminService:
             "assigned_providers": {
                 "always_available_pathways": assigned_provider_pathways,
             },
+            "provider_workload": provider_workload,
             "effective_permissions": {
                 "note": "See GET /roles/matrix for the full role x capability RBAC matrix.",
             },
@@ -412,6 +414,42 @@ class RoleAdminService:
         if allowed_roles is None or role in allowed_roles:
             return "full"
         return "none"
+
+    async def _provider_workload_summary(self, users: list[User]) -> dict[str, Any]:
+        """Real assigned/unassigned counts across every pathway-eligible provider role.
+
+        Not DOCX-sourced (a Figma "Permissions panel" screenshot's
+        "Assigned - 14 active" / "Unassigned - 2 - providers redundant"
+        tiles had nothing behind them - no "provider workload" or
+        "provider redundant" concept existed anywhere in this backend).
+
+        A provider genuinely "has active workload" if they are the real
+        `provider_user_id` on at least one `TeamAssignment` whose status
+        is `locked_on` (SCS/PT-IM, auto-assigned) or `enabled` (an
+        operator's optional-pathway toggle) - i.e. they are actually
+        serving at least one real operator right now. "Unassigned" is the
+        real complement: an active provider-role account currently
+        serving nobody, a genuine staffing-redundancy signal for Admin.
+        """
+        provider_roles = {p["role"] for p in get_support_pathways()}
+        provider_ids = {u.id for u in users if u.role in provider_roles and u.is_active}
+        if not provider_ids:
+            return {"assigned_count": 0, "unassigned_count": 0, "total_provider_count": 0}
+
+        active_assignments = await TeamAssignment.find(
+            {
+                "provider_user_id": {"$in": list(provider_ids)},
+                "status": {"$in": ["locked_on", "enabled"]},
+            }
+        ).to_list()
+        providers_with_workload = {a.provider_user_id for a in active_assignments if a.provider_user_id}
+
+        assigned_count = len(providers_with_workload)
+        return {
+            "assigned_count": assigned_count,
+            "unassigned_count": len(provider_ids) - assigned_count,
+            "total_provider_count": len(provider_ids),
+        }
 
     async def _purpose_consent_summary(self) -> dict[str, Any]:
         """Reuses the existing Chaplain/Purpose pathway toggle - no new model.
