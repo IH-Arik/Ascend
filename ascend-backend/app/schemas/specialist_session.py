@@ -5,7 +5,7 @@ from datetime import date
 from pydantic import BaseModel, Field, model_validator
 
 SESSION_TYPES = ("individual", "group")
-SESSION_STATUSES = ("scheduled", "completed", "escalated", "cancelled", "no_show")
+SESSION_STATUSES = ("scheduled", "in_progress", "completed", "escalated", "cancelled", "no_show")
 
 
 class SpecialistSessionCreate(BaseModel):
@@ -18,6 +18,9 @@ class SpecialistSessionCreate(BaseModel):
     group_label: str | None = Field(default=None, max_length=80)
     topic: str | None = Field(default=None, max_length=120)
     capacity: int | None = Field(default=None, gt=0, le=100)
+    # Real, provider-authored prep items (labels only - "done" always starts
+    # False; see `ChecklistItem`).
+    prep_checklist_items: list[str] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def _validate_shape(self) -> "SpecialistSessionCreate":
@@ -32,6 +35,13 @@ class SpecialistSessionUpdate(BaseModel):
     """Update a session's status."""
 
     status: str | None = Field(default=None, pattern="^(" + "|".join(SESSION_STATUSES) + ")$")
+
+
+class ChecklistItemToggle(BaseModel):
+    """Toggle one real prep-checklist item's done state, matched by its label."""
+
+    label: str
+    done: bool
 
 
 class SpecialistSessionResponse(BaseModel):
@@ -51,4 +61,9 @@ class SpecialistSessionResponse(BaseModel):
     capacity: int | None
     capacity_pct: float | None
     status: str
+    prep_checklist: list[dict]
+    prep_ready: bool
+    started_at: str | None
+    ended_at: str | None
+    duration_minutes: float | None
     created_at: str

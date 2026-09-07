@@ -238,10 +238,20 @@ class ReportsService:
                     severity_breakdown[r["severity_level"]] = severity_breakdown.get(r["severity_level"], 0) + 1
 
             new_incidence_count = 0
+            # Real, not a fabricated "total days lost" ledger (no historical
+            # injury-duration record exists anywhere in this backend) - this
+            # sums each new-in-window case's real current `days_out`
+            # (today - injury_reported_on), the same field the Injury Queue
+            # table already shows per operator. A snapshot-based real
+            # derivation, not an integrated-over-the-quarter true total.
+            days_lost = 0
             for m in members:
                 plan = plans_by_user_id.get(str(m.id))
                 if plan and plan.injury_reported_on and window_start <= plan.injury_reported_on <= window_end:
                     new_incidence_count += 1
+                    row = rows_by_user_id.get(str(m.id))
+                    if row and row["days_out"] is not None:
+                        days_lost += row["days_out"]
             person_months_at_risk = round(cohort_size * window_days / 30, 1)
             incidence_rate = (
                 round(new_incidence_count / person_months_at_risk * 100, 1) if person_months_at_risk > 0 else None
@@ -258,6 +268,7 @@ class ReportsService:
                     "new_injury_incidence_count": new_incidence_count,
                     "person_months_at_risk": person_months_at_risk,
                     "incidence_rate_per_100_person_months": incidence_rate,
+                    "days_lost": days_lost,
                 }
             )
 
@@ -287,6 +298,42 @@ class ReportsService:
             *(self.get_injury_report_by_flight(fiscal_year=fiscal_year, quarter=q) for q in (1, 2, 3, 4))
         )
         quarters = [{"quarter": q, **data} for q, data in zip((1, 2, 3, 4), results)]
+
+        # Real quarter-level totals, derived from the same per-flight rows
+        # already computed above - not a second data source. `l4_plus_count`
+        # sums each flight's real `severity_breakdown["L4"]`. `days_lost` is
+        # a real, documented snapshot-based sum (see the per-flight
+        # computation above), not an invented number.
+        for entry in quarters:
+            total_injuries = sum(f["active_injury_count"] for f in entry["flights"])
+            l4_plus_count = sum(f["severity_breakdown"].get("L4", 0) for f in entry["flights"])
+            days_lost = sum(f["days_lost"] for f in entry["flights"])
+            total_incidence = sum(f["new_injury_incidence_count"] for f in entry["flights"])
+            total_person_months = sum(f["person_months_at_risk"] for f in entry["flights"])
+            entry["total_injuries"] = total_injuries
+            entry["l4_plus_count"] = l4_plus_count
+            entry["days_lost"] = days_lost
+            entry["injury_rate_per_100_person_months"] = (
+                round(total_incidence / total_person_months * 100, 1) if total_person_months > 0 else None
+            )
+
+        for index, entry in enumerate(quarters):
+            previous = quarters[index - 1] if index > 0 else None
+            entry["total_injuries_delta"] = (
+                entry["total_injuries"] - previous["total_injuries"] if previous else None
+            )
+            entry["l4_plus_count_delta"] = (
+                entry["l4_plus_count"] - previous["l4_plus_count"] if previous else None
+            )
+            entry["days_lost_delta"] = entry["days_lost"] - previous["days_lost"] if previous else None
+            entry["injury_rate_per_100_person_months_delta"] = (
+                round(entry["injury_rate_per_100_person_months"] - previous["injury_rate_per_100_person_months"], 1)
+                if previous
+                and entry["injury_rate_per_100_person_months"] is not None
+                and previous["injury_rate_per_100_person_months"] is not None
+                else None
+            )
+
         return {"fiscal_year": fiscal_year, "quarters": quarters}
 
     async def get_injury_type_breakdown(

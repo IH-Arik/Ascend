@@ -11,6 +11,7 @@ source or verify one, so it is not fabricated or displayed.
 
 from __future__ import annotations
 
+from datetime import date as date_cls
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,24 @@ from app.services.team_service import TeamService
 SUPPORT_PATHWAYS_QUESTION_ID = 18
 
 
+def compute_age(date_of_birth: date_cls | None) -> int | None:
+    """Real integer age from a real stored date of birth - never guessed."""
+    if date_of_birth is None:
+        return None
+    today = utc_now().date()
+    years = today.year - date_of_birth.year
+    if (today.month, today.day) < (date_of_birth.month, date_of_birth.day):
+        years -= 1
+    return years
+
+
+def compute_bmi(height_in: float | None, weight_lb: float | None) -> float | None:
+    """Real BMI from real stored height/weight - standard imperial formula, never guessed."""
+    if height_in is None or weight_lb is None or height_in <= 0:
+        return None
+    return round((weight_lb / (height_in**2)) * 703, 1)
+
+
 class ProfileService:
     """Build the aggregated Profile screen payload."""
 
@@ -53,6 +72,12 @@ class ProfileService:
             role=user.role,
             unit_id=user.unit_id,
             rank_grade=user.rank_grade,
+            date_of_birth=user.date_of_birth,
+            age=compute_age(user.date_of_birth),
+            sex=user.sex,
+            height_in=user.height_in,
+            weight_lb=user.weight_lb,
+            bmi=compute_bmi(user.height_in, user.weight_lb),
             avatar_url=self._avatar_url(user.id) if user.avatar_storage_path is not None else None,
             is_verified=user.is_verified,
             onboarding_completed=user.onboarding_completed,
@@ -97,6 +122,14 @@ class ProfileService:
             user.full_name = stripped_name
         if payload.rank_grade is not None:
             user.rank_grade = payload.rank_grade.strip() or None
+        if payload.date_of_birth is not None:
+            user.date_of_birth = payload.date_of_birth
+        if payload.sex is not None:
+            user.sex = payload.sex
+        if payload.height_in is not None:
+            user.height_in = payload.height_in
+        if payload.weight_lb is not None:
+            user.weight_lb = payload.weight_lb
         if payload.theme_preference is not None:
             user.theme_preference = payload.theme_preference
         if payload.notifications_enabled is not None:

@@ -15,6 +15,7 @@ from app.models import Assessment
 from app.models import AuditLog
 from app.models import Briefing
 from app.models import CheckinAnswer
+from app.models import CoordinationItem
 from app.models import CoverageLog
 from app.models import DeactivationRequest
 from app.models import EmergencyContactConfig
@@ -22,6 +23,8 @@ from app.models import EquipmentGap
 from app.models import IdmtHandoff
 from app.models import LeadershipAnnotation
 from app.models import LeaveRecord
+from app.models import MacroTarget
+from app.models import MealLog
 from app.models import MedicalRecord
 from app.models import MedicalRecordAccessEvent
 from app.models import Message
@@ -48,6 +51,7 @@ from app.models import ScheduledExport
 from app.models import SchedulerJobRun
 from app.models import ScoringConfig
 from app.models import PerformanceSummary
+from app.models import PtimRecommendation
 from app.models import QuestionBankVersion
 from app.models import SpecialistNote
 from app.models import SupportRequest
@@ -79,7 +83,7 @@ async def init_db() -> None:
     # init_db fails there is no retry for the rest of the process's life
     # (see is_database_connected), so losing this race even once means a
     # full backend restart to recover.
-    timeout_ms = 30000 if settings.db_required else 40000
+    timeout_ms = 30000 if settings.db_required else 90000
     client_options: dict[str, object] = {
         "serverSelectionTimeoutMS": timeout_ms,
         "connectTimeoutMS": timeout_ms,
@@ -149,6 +153,10 @@ async def init_db() -> None:
                     PerformanceSummary,
                     QuestionBankVersion,
                     SpecialistNote,
+                    MealLog,
+                    MacroTarget,
+                    CoordinationItem,
+                    PtimRecommendation,
                 ],
             )
         else:
@@ -205,9 +213,13 @@ async def init_db() -> None:
                         PerformanceSummary,
                         QuestionBankVersion,
                         SpecialistNote,
+                        MealLog,
+                        MacroTarget,
+                        CoordinationItem,
+                        PtimRecommendation,
                     ],
                 ),
-                timeout=45.0,
+                timeout=95.0,
             )
     except Exception as e:
         await close_db()

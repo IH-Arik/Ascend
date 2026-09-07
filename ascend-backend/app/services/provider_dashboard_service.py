@@ -19,7 +19,7 @@ the pathway key directly.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from app.core.recommendation_rules import COMPONENT_PRIORITY_ORDER
@@ -37,6 +37,8 @@ from app.models.audit_log import AuditLog
 from app.models.checkin_answer import CheckinAnswer
 from app.models.deactivation_request import DeactivationRequest
 from app.models.equipment_gap import EquipmentGap
+from app.models.macro_target import MacroTarget
+from app.models.meal_log import MealLog
 from app.models.medical_record import MedicalRecord
 from app.models.oft_record import OFTRecord
 from app.models.onboarding_answer import OnboardingAnswer
@@ -52,6 +54,7 @@ from app.services.admin_confirmation_service import AdminConfirmationService
 from app.services.credential_service import CredentialService
 from app.services.medical_record_service import MedicalRecordService
 from app.services.oft_service import OFTService
+from app.services.profile_service import compute_age, compute_bmi
 from app.services.reconditioning_service import ReconditioningService
 from app.services.reports_service import ReportsService
 from app.services.role_admin_service import RoleAdminService
@@ -78,6 +81,24 @@ SPECIALIST_COMPONENT_BY_ROLE = {
 # deliberately not approximated with a fabricated field.
 NUTRITION_SIGNAL_QUESTION_CODES = ("d0_04", "w_03", "w_04", "m_03", "m_04")
 NUTRITION_SIGNAL_WINDOW_DAYS = 60
+
+# "Macro distribution · cohort" widget - real, not DOCX-sourced (see
+# `get_cohort_macro_distribution` docstring). Window matches the old
+# mock's own "last 7 days" framing; tolerance is this service's own
+# choice, not DOCX-sourced.
+MACRO_DISTRIBUTION_WINDOW_DAYS = 7
+MACRO_ON_TARGET_TOLERANCE_PCT = 10.0
+
+# "Hydration reminder" alert - real, not DOCX-sourced (see
+# `get_hydration_alerts` docstring). Same 2 hydration-specific question
+# codes already used for `hydration_energy_trend`, not the full
+# NUTRITION_SIGNAL_QUESTION_CODES set (that also mixes in meal-consistency
+# codes). Threshold/streak/window are this service's own choice, matching
+# the old mock's own "below 60% adherence for 5+ days" framing.
+HYDRATION_QUESTION_CODES = ("d0_04", "w_04")
+HYDRATION_ALERT_WINDOW_DAYS = 14
+HYDRATION_ALERT_THRESHOLD_PCT = 60.0
+HYDRATION_ALERT_MIN_STREAK_DAYS = 5
 
 # Mental Performance dashboard's real, question-mapped sub-drivers. DOCX
 # doesn't define these as a named breakdown - built at the user's explicit
@@ -259,21 +280,32 @@ class ProviderDashboardService:
         if user is None:
             return None
 
-        reconditioning, recent_workouts, pending_records = await asyncio.gather(
+        reconditioning, recent_workouts, pending_records, oft_status = await asyncio.gather(
             self.reconditioning_service.get_for_user(user_id),
             self._recent_workouts(user_id),
             MedicalRecord.find(MedicalRecord.user_id == user_id, MedicalRecord.status == "pending").to_list(),
+            self.oft_service.get_status_for_user(user),
         )
 
         return {
             "user_id": str(user_id),
             "user_name": user.full_name,
+            "rank_grade": user.rank_grade,
+            "flight_name": await self._flight_name_for_user(user),
             "reconditioning_phase": reconditioning.get("phase"),
             "ptim_clearance_status": reconditioning.get("ptim_clearance_status"),
             "injury_flags": reconditioning.get("injury_flags"),
             "next_review_date": reconditioning.get("next_review_date"),
             "reported_limitation_recent": any(w.reported_limitation for w in recent_workouts),
             "pending_medical_record_reviews": len(pending_records),
+            # Real fields the Injury Queue view needs - severity/days_out
+            # already existed on the reconditioning plan but were never
+            # returned by this row before; oft_status is the real per-user
+            # OFTService summary (current_status + next_scheduled_date),
+            # never a fabricated "HOLD"/"CLEARED <date>" label.
+            "limitation_flag": reconditioning.get("limitation_flag"),
+            "days_out": reconditioning.get("days_out"),
+            "oft_status": oft_status,
             # Full pending-record detail (not just the count above) so the
             # PT/IM records tab can render a real caseload-wide review
             # queue - GET /records/uploads is self-scoped to the caller and
@@ -293,6 +325,13 @@ class ProviderDashboardService:
             "sessions_completed": reconditioning.get("sessions_completed"),
             "sessions_total": reconditioning.get("sessions_total"),
         }
+
+    async def _flight_name_for_user(self, user: User) -> str | None:
+        """Real flight name for a user's `unit_id`, if it resolves to a flight."""
+        if not user.unit_id:
+            return None
+        flight = await OrgUnit.get(user.unit_id)
+        return flight.name if flight and flight.unit_type == "flight" else None
 
     async def get_specialist_dashboard(self, provider: User) -> dict[str, Any]:
         """Specialist Dashboard - shared shape for Nutritionist/Mental Performance/Chaplain.
@@ -401,6 +440,16 @@ class ProviderDashboardService:
         }
         if pathway_key == ROLE_NUTRITIONIST:
             row["nutrition_signals"] = nutrition_signals
+            # Real, self-reported biometric profile fields (see
+            # `app/models/user.py`) - nutrition counseling's own core
+            # inputs (BMI/weight), not clinical/injury data, so shown
+            # directly here rather than gated through PerformanceSummary.
+            # Null when the operator hasn't provided them yet - never guessed.
+            row["age"] = compute_age(user.date_of_birth)
+            row["sex"] = user.sex
+            row["height_in"] = user.height_in
+            row["weight_lb"] = user.weight_lb
+            row["bmi"] = compute_bmi(user.height_in, user.weight_lb)
         return row
 
     async def _build_nutrition_signals(self, user_id: Any, today: date) -> dict[str, Any]:
@@ -576,6 +625,210 @@ class ProviderDashboardService:
             "total_flights": len(flights),
             "flights_meeting_cohort_minimum": len(flight_rows),
             "flights": flight_rows,
+        }
+
+    async def get_hydration_alerts(self, provider: User) -> dict[str, Any]:
+        """Real, k-gated "Hydration reminder" alerts for the Nutritionist dashboard.
+
+        Not DOCX-sourced (the Figma mock showed a static "Hydration reminder
+        - Bravo + Charlie flights... below 60% adherence for 5+ days" banner
+        with an "Auto-message drafted" action with no real backing for
+        either). Built on explicit user go-ahead:
+
+        - "Adherence" for a real calendar day = the real fraction of that
+          day's hydration check-in answers (`d0_04`/`w_04`) scoring >=3
+          of 4, among flight members. Days with zero real check-ins that
+          day are skipped (not counted as 0%), so a flight's silence never
+          manufactures an alert.
+        - "Streak" walks backward day-by-day from the most recent real
+          data day, counting consecutive real days below threshold; a
+          no-data day is skipped without breaking the streak, a
+          `>= threshold` day breaks it.
+        - No message is auto-sent - "auto-drafted" here means the response
+          includes the flagged flight's real members (id + name) so the
+          frontend can let the Nutritionist compose and send a real
+          per-member message via the existing 1:1 messaging system
+          (`Message`/`sendMessage`) - there is no flight-wide broadcast
+          message concept in this backend, so this deliberately doesn't
+          invent one. A flight's real roster can include members with no
+          real messaging relationship to this Nutritionist (assigned to a
+          different provider, or never opted into the Nutritionist
+          pathway) - `messageable` on each member reflects the same real
+          `TeamAssignment` gate `MessagingService._can_message` enforces,
+          so the frontend never offers to send a message that would 403.
+        """
+        cohort_k = (await self.role_admin_service.get_scope_config(ROLE_NUTRITIONIST))["cohort_k"]
+        flights = await OrgUnit.find(OrgUnit.unit_type == "flight").to_list()
+        flight_ids = [str(f.id) for f in flights]
+        all_members = await User.find({"unit_id": {"$in": flight_ids}}).to_list()
+        members_by_flight: dict[str, list[User]] = {fid: [] for fid in flight_ids}
+        for member in all_members:
+            if member.unit_id in members_by_flight:
+                members_by_flight[member.unit_id].append(member)
+
+        assignment_links = await TeamAssignment.find(
+            {
+                "$or": [
+                    {"user_id": {"$in": [m.id for m in all_members]}, "provider_user_id": provider.id},
+                    {"user_id": provider.id, "provider_user_id": {"$in": [m.id for m in all_members]}},
+                ],
+                "status": {"$ne": "disabled"},
+            }
+        ).to_list()
+        messageable_ids = {a.user_id for a in assignment_links} | {a.provider_user_id for a in assignment_links}
+        messageable_ids.discard(provider.id)
+
+        cutoff = date.today() - timedelta(days=HYDRATION_ALERT_WINDOW_DAYS)
+        all_answers = await CheckinAnswer.find(
+            {
+                "user_id": {"$in": [m.id for m in all_members]},
+                "question_code": {"$in": list(HYDRATION_QUESTION_CODES)},
+                "checkin_date": {"$gte": cutoff},
+                "raw_score_1_to_4": {"$ne": None},
+            }
+        ).to_list()
+        answers_by_user = {}
+        for answer in all_answers:
+            answers_by_user.setdefault(answer.user_id, []).append(answer)
+
+        alerts: list[dict[str, Any]] = []
+        for flight in flights:
+            members = members_by_flight.get(str(flight.id), [])
+            if len(members) < cohort_k:
+                continue
+
+            by_date: dict[date, list[int]] = {}
+            for member in members:
+                for answer in answers_by_user.get(member.id, []):
+                    by_date.setdefault(answer.checkin_date, []).append(answer.raw_score_1_to_4)
+
+            if not by_date:
+                continue
+
+            streak_days = 0
+            latest_adherence_pct: float | None = None
+            for offset in range(HYDRATION_ALERT_WINDOW_DAYS):
+                day = date.today() - timedelta(days=offset)
+                scores = by_date.get(day)
+                if not scores:
+                    continue
+                adherence_pct = round(sum(1 for s in scores if s >= 3) / len(scores) * 100, 1)
+                if latest_adherence_pct is None:
+                    latest_adherence_pct = adherence_pct
+                if adherence_pct < HYDRATION_ALERT_THRESHOLD_PCT:
+                    streak_days += 1
+                else:
+                    break
+
+            if streak_days >= HYDRATION_ALERT_MIN_STREAK_DAYS:
+                alerts.append(
+                    {
+                        "flight_id": str(flight.id),
+                        "flight_name": flight.name,
+                        "streak_days": streak_days,
+                        "latest_adherence_pct": latest_adherence_pct,
+                        "threshold_pct": HYDRATION_ALERT_THRESHOLD_PCT,
+                        "members": [
+                            {"id": str(m.id), "name": m.full_name, "messageable": m.id in messageable_ids}
+                            for m in members
+                        ],
+                    }
+                )
+
+        alerts.sort(key=lambda a: a["streak_days"], reverse=True)
+        return {
+            "window_days": HYDRATION_ALERT_WINDOW_DAYS,
+            "threshold_pct": HYDRATION_ALERT_THRESHOLD_PCT,
+            "min_streak_days": HYDRATION_ALERT_MIN_STREAK_DAYS,
+            "min_cohort_size": cohort_k,
+            "alerts": alerts,
+        }
+
+    async def get_cohort_macro_distribution(self, provider: User) -> dict[str, Any]:
+        """Real, k-gated cohort macro-split for the Nutritionist dashboard.
+
+        Not DOCX-sourced (the Figma mock's "Macro distribution · cohort"
+        donut compared logged macros against "prescribed targets" with no
+        real target concept behind it). Built on explicit user go-ahead:
+        `MacroTarget` is a new, real per-operator target a Nutritionist can
+        set (`macro_target_service.set_target`), and the actual split below
+        is computed from real `MealLog` entries, not fabricated. Members
+        with no macro-complete meal logged in the window, or no target set,
+        simply don't contribute to the corresponding part of the aggregate
+        - never backfilled with a guessed value.
+        """
+        cohort_k = (await self.role_admin_service.get_scope_config(ROLE_NUTRITIONIST))["cohort_k"]
+        user_ids = await self._assigned_user_ids(provider.id, ROLE_NUTRITIONIST)
+        cohort_size = len(user_ids)
+        if cohort_size < cohort_k:
+            return {
+                "window_days": MACRO_DISTRIBUTION_WINDOW_DAYS,
+                "min_cohort_size": cohort_k,
+                "cohort_size": cohort_size,
+                "meets_cohort_minimum": False,
+                "carbs_pct": None,
+                "protein_pct": None,
+                "fat_pct": None,
+                "entries_with_macros": 0,
+                "on_target_band_pct": None,
+                "on_target_entries": 0,
+                "entries_with_target": 0,
+            }
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=MACRO_DISTRIBUTION_WINDOW_DAYS)
+        entries, targets = await asyncio.gather(
+            MealLog.find({"user_id": {"$in": user_ids}, "meal_date": {"$gte": cutoff}}).to_list(),
+            MacroTarget.find({"user_id": {"$in": user_ids}, "status": "active"}).to_list(),
+        )
+        targets_by_user = {t.user_id: t for t in targets}
+
+        macro_complete = [e for e in entries if e.carbs_g is not None and e.protein_g is not None and e.fat_g is not None]
+
+        carbs_kcal = sum(e.carbs_g * 4 for e in macro_complete)
+        protein_kcal = sum(e.protein_g * 4 for e in macro_complete)
+        fat_kcal = sum(e.fat_g * 9 for e in macro_complete)
+        total_kcal = carbs_kcal + protein_kcal + fat_kcal
+
+        carbs_pct = round(carbs_kcal / total_kcal * 100, 1) if total_kcal > 0 else None
+        protein_pct = round(protein_kcal / total_kcal * 100, 1) if total_kcal > 0 else None
+        fat_pct = round(fat_kcal / total_kcal * 100, 1) if total_kcal > 0 else None
+
+        on_target_entries = 0
+        entries_with_target = 0
+        for e in macro_complete:
+            target = targets_by_user.get(e.user_id)
+            if target is None:
+                continue
+            entry_kcal = e.carbs_g * 4 + e.protein_g * 4 + e.fat_g * 9
+            if entry_kcal <= 0:
+                continue
+            entries_with_target += 1
+            entry_carbs_pct = e.carbs_g * 4 / entry_kcal * 100
+            entry_protein_pct = e.protein_g * 4 / entry_kcal * 100
+            entry_fat_pct = e.fat_g * 9 / entry_kcal * 100
+            if (
+                abs(entry_carbs_pct - target.carbs_pct) <= MACRO_ON_TARGET_TOLERANCE_PCT
+                and abs(entry_protein_pct - target.protein_pct) <= MACRO_ON_TARGET_TOLERANCE_PCT
+                and abs(entry_fat_pct - target.fat_pct) <= MACRO_ON_TARGET_TOLERANCE_PCT
+            ):
+                on_target_entries += 1
+
+        on_target_band_pct = (
+            round(on_target_entries / entries_with_target * 100, 1) if entries_with_target > 0 else None
+        )
+
+        return {
+            "window_days": MACRO_DISTRIBUTION_WINDOW_DAYS,
+            "min_cohort_size": cohort_k,
+            "cohort_size": cohort_size,
+            "meets_cohort_minimum": True,
+            "carbs_pct": carbs_pct,
+            "protein_pct": protein_pct,
+            "fat_pct": fat_pct,
+            "entries_with_macros": len(macro_complete),
+            "on_target_band_pct": on_target_band_pct,
+            "on_target_entries": on_target_entries,
+            "entries_with_target": entries_with_target,
         }
 
     async def get_leadership_dashboard(self) -> dict[str, Any]:

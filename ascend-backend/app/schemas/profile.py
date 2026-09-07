@@ -1,8 +1,10 @@
 """User profile schema."""
 
-from datetime import datetime
+from datetime import date, datetime, timezone
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.models.user import SEX_VALUES
 
 AVATAR_MAX_BYTES = 5 * 1024 * 1024
 AVATAR_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic"}
@@ -39,6 +41,12 @@ class ProfileResponse(BaseModel):
     role: str
     unit_id: str | None
     rank_grade: str | None
+    date_of_birth: date | None
+    age: int | None
+    sex: str | None
+    height_in: float | None
+    weight_lb: float | None
+    bmi: float | None
     avatar_url: str | None
     is_verified: bool
     onboarding_completed: bool
@@ -78,6 +86,24 @@ class UpdateProfileSettingsRequest(BaseModel):
     rank_grade: str | None = Field(default=None, max_length=40)
     theme_preference: str | None = None
     notifications_enabled: bool | None = None
+    # Real, self-reported biometric fields - see `app/models/user.py`.
+    date_of_birth: date | None = None
+    sex: str | None = Field(default=None, pattern="^(" + "|".join(SEX_VALUES) + ")$")
+    height_in: float | None = Field(default=None, ge=36, le=96)
+    weight_lb: float | None = Field(default=None, ge=60, le=500)
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def _dob_not_in_future_or_implausible(cls, value: date | None) -> date | None:
+        if value is None:
+            return value
+        today = datetime.now(timezone.utc).date()
+        if value > today:
+            raise ValueError("Date of birth cannot be in the future.")
+        age_years = (today - value).days / 365.25
+        if age_years < 16 or age_years > 80:
+            raise ValueError("Date of birth is outside a plausible range.")
+        return value
 
 
 class ChangeEmailRequest(BaseModel):

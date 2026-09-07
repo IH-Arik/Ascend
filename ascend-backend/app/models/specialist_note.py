@@ -43,6 +43,11 @@ class SpecialistNote(Document):
     specialist_id: PydanticObjectId
     specialist_type: str
     note_date: date = Field(default_factory=date.today)
+    # Real, added 2026-09-07 - the Nutritionist Records tab's "New
+    # assessment note" mock modal has a required Title field with no real
+    # backing; added here rather than dropped from the UI since it's a
+    # simple, real, provider-authored label (not derived/fabricated data).
+    title: str = "Note"
     user_concern: str
     action_assigned: str | None = None
     follow_up_needed: bool = False

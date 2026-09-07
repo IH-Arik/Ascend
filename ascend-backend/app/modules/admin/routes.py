@@ -53,7 +53,7 @@ from app.schemas.idmt_handoff import IdmtHandoffBatchCreateRequest, IdmtHandoffC
 from app.schemas.leave_record import LeaveRecordCreate
 from app.schemas.org_unit import OrgUnitCreate
 from app.schemas.audit_log import AuditLogOpenEventRequest
-from app.schemas.specialist_session import SpecialistSessionCreate, SpecialistSessionUpdate
+from app.schemas.specialist_session import ChecklistItemToggle, SpecialistSessionCreate, SpecialistSessionUpdate
 from app.schemas.pt_session import PTSessionAttendeeAdd, PTSessionCreate, PTSessionUpdate
 from app.schemas.provider_credential import CredentialCreate
 from app.schemas.question_bank_version import QuestionBankVersionCreate
@@ -1119,6 +1119,27 @@ async def update_specialist_session(
     return success_response("Session updated successfully.", data)
 
 
+@router.post("/specialist-sessions/{session_id}/start", summary="Actually start a real scheduled session")
+async def start_specialist_session(
+    session_id: str,
+    current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
+):
+    """Start a real scheduled session - stamps `started_at` for real duration tracking."""
+    data = await specialist_session_service.start(session_id, current_user)
+    return success_response("Session started successfully.", data)
+
+
+@router.patch("/specialist-sessions/{session_id}/checklist", summary="Toggle one real prep-checklist item")
+async def toggle_specialist_session_checklist_item(
+    session_id: str,
+    payload: ChecklistItemToggle,
+    current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
+):
+    """Check/uncheck one real prep-checklist item on a session."""
+    data = await specialist_session_service.toggle_checklist_item(session_id, current_user, payload)
+    return success_response("Checklist item updated successfully.", data)
+
+
 @router.get("/specialist-sessions/today", summary="Today's real scheduled specialist sessions")
 async def list_specialist_sessions_today(
     current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
@@ -1138,6 +1159,15 @@ async def list_specialist_sessions_upcoming(
     is_admin_view = current_user.role in ADMIN_ROLES
     data = await specialist_session_service.list_upcoming(None if is_admin_view else current_user, days)
     return success_response("Upcoming sessions loaded successfully.", data)
+
+
+@router.get("/specialist-sessions/queue-summary", summary="Real today/this-week consult-queue counts")
+async def get_specialist_session_queue_summary(
+    current_user: User = Depends(require_roles(*SPECIALIST_PROVIDER_ROLES)),
+):
+    """Real today/this-week session counts for the calling specialist provider."""
+    data = await specialist_session_service.get_queue_summary(current_user)
+    return success_response("Consult queue summary loaded successfully.", data)
 
 
 # --- Provider leave/TDY/training/medical absence tracking ---

@@ -6,6 +6,7 @@ from app.models.assessment import Assessment
 from app.models.audit_log import AuditLog
 from app.models.briefing import Briefing
 from app.models.checkin_answer import CheckinAnswer
+from app.models.coordination_item import CoordinationItem
 from app.models.coverage_log import CoverageLog
 from app.models.deactivation_request import DeactivationRequest
 from app.models.emergency_contact_config import EmergencyContactConfig
@@ -13,6 +14,8 @@ from app.models.equipment_gap import EquipmentGap
 from app.models.idmt_handoff import IdmtHandoff
 from app.models.leadership_annotation import LeadershipAnnotation
 from app.models.leave_record import LeaveRecord
+from app.models.macro_target import MacroTarget
+from app.models.meal_log import MealLog
 from app.models.medical_record import MedicalRecord, MedicalRecordAccessEvent
 from app.models.message import Message
 from app.models.message_thread import MessageThread
@@ -39,6 +42,7 @@ from app.models.scheduled_export import ScheduledExport
 from app.models.scheduler_job_run import SchedulerJobRun
 from app.models.scoring_config import ScoringConfig
 from app.models.performance_summary import PerformanceSummary
+from app.models.ptim_recommendation import PtimRecommendation
 from app.models.question_bank_version import QuestionBankVersion
 from app.models.specialist_note import SpecialistNote
 from app.models.support_request import SupportRequest
@@ -55,6 +59,7 @@ __all__ = [
     "AuditLog",
     "Briefing",
     "CheckinAnswer",
+    "CoordinationItem",
     "CoverageLog",
     "DeactivationRequest",
     "EmergencyContactConfig",
@@ -62,6 +67,8 @@ __all__ = [
     "IdmtHandoff",
     "LeadershipAnnotation",
     "LeaveRecord",
+    "MacroTarget",
+    "MealLog",
     "MedicalRecord",
     "MedicalRecordAccessEvent",
     "Message",
@@ -89,6 +96,7 @@ __all__ = [
     "SchedulerJobRun",
     "ScoringConfig",
     "PerformanceSummary",
+    "PtimRecommendation",
     "QuestionBankVersion",
     "SpecialistNote",
     "SupportRequest",

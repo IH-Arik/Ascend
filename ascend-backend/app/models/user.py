@@ -1,10 +1,12 @@
 """User document model."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from beanie import Document
 from pydantic import EmailStr, Field
 from pymongo import IndexModel
+
+SEX_VALUES = ("M", "F", "prefer_not_to_say")
 
 
 def utc_now() -> datetime:
@@ -20,6 +22,20 @@ class User(Document):
     role: str = "Airman"
     unit_id: str | None = None
     rank_grade: str | None = None
+    # Real, added 2026-09-07 - self-reported biometric profile fields. Not
+    # DOCX-sourced (no requirements-doc field for these), added on explicit
+    # user go-ahead so nutrition-relevant biometrics (weight/height/BMI) can
+    # be real instead of the old Figma mock's fabricated per-patient vitals.
+    # Deliberately basic account-profile fields (self-reported at
+    # registration/profile-edit, same trust level as `rank_grade`), not
+    # routed through the medical-records/PerformanceSummary pipeline -
+    # unlike `medication_allergy_considerations_if_authorized`, which stays
+    # gated there per DOCX 8.8's explicit authorization requirement for
+    # medical/allergy content.
+    date_of_birth: date | None = None
+    sex: str | None = None
+    height_in: float | None = None
+    weight_lb: float | None = None
     avatar_storage_path: str | None = None
     avatar_file_name: str | None = None
     avatar_content_type: str | None = None

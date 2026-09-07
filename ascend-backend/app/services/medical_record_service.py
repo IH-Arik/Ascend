@@ -234,6 +234,113 @@ class MedicalRecordService:
             )
         return record
 
+    async def list_for_caseload(self, viewer: User) -> dict[str, Any]:
+        """PT/IM (or Admin) caseload-wide view - one row per operator, their most
+        recent record, with a real per-viewer privacy state (not the raw 403/200
+        split `_get_viewable` uses internally - a caseload list needs to show
+        *why* a record isn't open, not just omit it).
+        """
+        if viewer.role in ADMIN_ROLES:
+            user_ids = None
+        else:
+            assignments = await TeamAssignment.find(
+                TeamAssignment.pathway_key == ROLE_PTIM, TeamAssignment.provider_user_id == viewer.id
+            ).to_list()
+            user_ids = [a.user_id for a in assignments if a.provider_user_id is not None]
+
+        query = {} if user_ids is None else {"user_id": {"$in": user_ids}}
+        records = await MedicalRecord.find(query).to_list()
+        records.sort(key=lambda r: r.uploaded_at, reverse=True)
+
+        latest_by_user: dict[Any, MedicalRecord] = {}
+        for record in records:
+            if record.user_id not in latest_by_user:
+                latest_by_user[record.user_id] = record
+
+        rows = []
+        for record in latest_by_user.values():
+            target = await User.get(record.user_id)
+            rows.append(
+                {
+                    "id": str(record.id),
+                    "user_id": str(record.user_id),
+                    "user_name": target.full_name if target else None,
+                    "rank_grade": target.rank_grade if target else None,
+                    "document_type": record.document_type,
+                    "last_encounter": record.uploaded_at.isoformat(),
+                    "access_expires_at": record.access_expires_at.isoformat() if record.access_expires_at else None,
+                    "privacy_state": self._privacy_state(record, viewer),
+                }
+            )
+        rows.sort(key=lambda r: r["last_encounter"], reverse=True)
+        return {"records": rows}
+
+    def _privacy_state(self, record: MedicalRecord, viewer: User) -> str:
+        """Real, derived-not-fabricated privacy state for one viewer/record pair."""
+        if record.consent_status == "withdrawn":
+            return "consent_withdrawn"
+        if record.access_expires_at and record.access_expires_at < utc_now():
+            return "access_expired"
+        allowed_roles = record.approved_access_level or list(VIEW_ALLOWED_ROLES)
+        if viewer.id != record.user_id and viewer.role not in allowed_roles:
+            return "authorization_required"
+        return "restricted"
+
+    async def request_access(self, requester: User, record_id: str) -> dict[str, Any]:
+        """Real, audit-logged ask to widen a record's access - never auto-approved.
+
+        No fabricated approval workflow: this notifies the uploader + Admin and
+        logs the request. An Admin still has to actually call
+        `update_access_level` (already real) to grant it.
+        """
+        record = await MedicalRecord.get(record_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found.")
+        await self._log_event(
+            record.id, requester.id, requester.role, "access_requested",
+            f"{requester.role} requested access to this record.",
+        )
+        uploader = await User.get(record.uploaded_by)
+        if uploader is not None:
+            await self.notification_service.notify(
+                uploader.id,
+                family="medical_record_review_and_governance_notices",
+                title="Access requested to your medical record",
+                body=f"{requester.full_name or requester.role} requested access to a {record.document_type} record.",
+                related_entity_type="medical_record",
+                related_entity_id=str(record.id),
+            )
+        return {"requested": True}
+
+    async def withdraw_consent(self, actor: User, record_id: str) -> dict[str, Any]:
+        """The record owner (or Admin) withdraws consent - locks the record for review/download.
+
+        Real toggle, same precedent as the Chaplain pathway's witnessed
+        opt-in/out (`TeamAssignment.status`) - consent here was previously
+        hardcoded "granted" with no real withdrawal path.
+        """
+        record = await MedicalRecord.get(record_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found.")
+        if actor.id != record.user_id and actor.role not in ADMIN_ROLES:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the record owner or Admin may withdraw consent.")
+        record.consent_status = "withdrawn"
+        await record.save()
+        await self._log_event(record.id, actor.id, actor.role, "consent_withdrawn", "Consent withdrawn - record locked.")
+        return await self._serialize_detail(record, viewer_role=actor.role, is_owner=actor.id == record.user_id)
+
+    async def restore_consent(self, actor: User, record_id: str) -> dict[str, Any]:
+        """The record owner (or Admin) restores previously withdrawn consent."""
+        record = await MedicalRecord.get(record_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found.")
+        if actor.id != record.user_id and actor.role not in ADMIN_ROLES:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the record owner or Admin may restore consent.")
+        record.consent_status = "granted"
+        await record.save()
+        await self._log_event(record.id, actor.id, actor.role, "consent_restored", "Consent restored.")
+        return await self._serialize_detail(record, viewer_role=actor.role, is_owner=actor.id == record.user_id)
+
     async def update_access_level(
         self, admin: User, record_id: str, approved_access_level: list[str]
     ) -> dict[str, Any]:

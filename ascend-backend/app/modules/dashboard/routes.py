@@ -99,6 +99,24 @@ async def get_meal_consistency_by_flight(
     return success_response("Meal consistency by flight loaded successfully.", data)
 
 
+@router.get("/nutrition/macro-distribution", status_code=status.HTTP_200_OK)
+async def get_cohort_macro_distribution(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_NUTRITIONIST)),
+) -> dict[str, Any]:
+    """Nutritionist Dashboard - real, k-gated cohort macro-split vs real per-operator targets."""
+    data = await provider_dashboard_service.get_cohort_macro_distribution(current_user)
+    return success_response("Cohort macro distribution loaded successfully.", data)
+
+
+@router.get("/nutrition/hydration-alerts", status_code=status.HTTP_200_OK)
+async def get_hydration_alerts(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_NUTRITIONIST)),
+) -> dict[str, Any]:
+    """Nutritionist Dashboard - real, k-gated per-flight hydration-adherence streak alerts."""
+    data = await provider_dashboard_service.get_hydration_alerts(current_user)
+    return success_response("Hydration alerts loaded successfully.", data)
+
+
 @router.get("/leadership", status_code=status.HTTP_200_OK)
 async def get_leadership_dashboard(
     current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_LEADERSHIP)),

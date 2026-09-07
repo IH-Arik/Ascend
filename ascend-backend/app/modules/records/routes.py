@@ -9,13 +9,17 @@ from app.api.deps import get_current_user, require_roles
 from app.common.utils.responses import success_response
 from app.core.roles import ADMIN_ROLES, ROLE_PTIM, ROLE_SCS
 from app.models.user import User
+from app.schemas.coordination_item import CoordinationItemCreateRequest
 from app.schemas.medical_record import AccessLevelUpdateRequest, RecordReviewRequest, RevealFieldRequest
+from app.schemas.ptim_recommendation import PtimRecommendationCreateRequest
 from app.schemas.reconditioning import ReconditioningPlanUpdate
 from app.schemas.restriction import RestrictionCreate
 from app.schemas.rom_measurement import RomMeasurementCreate
+from app.services.coordination_item_service import CoordinationItemService
 from app.services.file_storage_service import guess_content_type
 from app.services.fly_away_kit_service import FlyAwayKitService
 from app.services.medical_record_service import MedicalRecordService
+from app.services.ptim_recommendation_service import PtimRecommendationService
 from app.services.reconditioning_service import ReconditioningService
 from app.services.records_service import RecordsService
 from app.services.restriction_service import RestrictionService
@@ -28,6 +32,8 @@ reconditioning_service = ReconditioningService()
 fly_away_kit_service = FlyAwayKitService()
 rom_measurement_service = RomMeasurementService()
 restriction_service = RestrictionService()
+coordination_item_service = CoordinationItemService()
+ptim_recommendation_service = PtimRecommendationService()
 
 
 @router.get("/home", status_code=status.HTTP_200_OK)
@@ -63,6 +69,76 @@ async def update_reconditioning_plan(
         return success_response("User not found.", {"available": False})
     data = await reconditioning_service.upsert_for_user(target_user, payload, current_user.id)
     return success_response("Reconditioning plan updated successfully.", data)
+
+
+@router.post("/coordination-items", status_code=status.HTTP_201_CREATED)
+async def raise_coordination_item(
+    payload: CoordinationItemCreateRequest,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """PT/IM or SCS raises a new joint coordination item."""
+    data = await coordination_item_service.raise_item(current_user, payload)
+    return success_response("Coordination item raised successfully.", data)
+
+
+@router.get("/coordination-items", status_code=status.HTTP_200_OK)
+async def list_coordination_items(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """List real coordination items for the caller's caseload (Admin sees all)."""
+    data = await coordination_item_service.list_for_viewer(current_user)
+    return success_response("Coordination items loaded successfully.", data)
+
+
+@router.post("/coordination-items/{item_id}/acknowledge", status_code=status.HTTP_200_OK)
+async def acknowledge_coordination_item(
+    item_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """The role an item is pending with acknowledges it."""
+    data = await coordination_item_service.acknowledge(current_user, item_id)
+    return success_response("Coordination item acknowledged successfully.", data)
+
+
+@router.post("/coordination-items/{item_id}/close", status_code=status.HTTP_200_OK)
+async def close_coordination_item(
+    item_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """Either role (or Admin) closes a resolved coordination item."""
+    data = await coordination_item_service.close(current_user, item_id)
+    return success_response("Coordination item closed successfully.", data)
+
+
+@router.post("/ptim-recommendations", status_code=status.HTTP_201_CREATED)
+async def create_ptim_recommendation(
+    payload: PtimRecommendationCreateRequest,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """PT/IM drafts a new quarter-scoped recommendation routed to SCS."""
+    data = await ptim_recommendation_service.create(current_user, payload)
+    return success_response("Recommendation drafted successfully.", data)
+
+
+@router.get("/ptim-recommendations", status_code=status.HTTP_200_OK)
+async def list_ptim_recommendations(
+    fiscal_year: int,
+    quarter: int,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """List recommendations drafted for one real fiscal quarter."""
+    data = await ptim_recommendation_service.list_for_quarter(fiscal_year, quarter)
+    return success_response("Recommendations loaded successfully.", data)
+
+
+@router.post("/ptim-recommendations/{recommendation_id}/done", status_code=status.HTTP_200_OK)
+async def mark_ptim_recommendation_done(
+    recommendation_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """PT/IM or SCS marks a recommendation done."""
+    data = await ptim_recommendation_service.mark_done(current_user, recommendation_id)
+    return success_response("Recommendation marked done.", data)
 
 
 @router.get("/reconditioning-plan/timeline", status_code=status.HTTP_200_OK)
@@ -186,6 +262,47 @@ async def list_medical_records(
     """Return the authenticated user's uploaded medical records."""
     data = await medical_record_service.list_for_user(current_user, document_type, search)
     return success_response("Records loaded successfully.", data)
+
+
+@router.get("/uploads/caseload", status_code=status.HTTP_200_OK)
+async def list_caseload_medical_records(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """PT/IM caseload-wide medical records view, one row per operator, with a
+    real per-viewer privacy state (RESTRICTED/AUTHORIZATION REQUIRED/ACCESS
+    EXPIRED/CONSENT WITHDRAWN)."""
+    data = await medical_record_service.list_for_caseload(current_user)
+    return success_response("Caseload records loaded successfully.", data)
+
+
+@router.post("/uploads/{record_id}/request-access", status_code=status.HTTP_200_OK)
+async def request_medical_record_access(
+    record_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),
+) -> dict[str, Any]:
+    """Real, audit-logged ask to widen a record's access - never auto-approved."""
+    data = await medical_record_service.request_access(current_user, record_id)
+    return success_response("Access requested successfully.", data)
+
+
+@router.post("/uploads/{record_id}/withdraw-consent", status_code=status.HTTP_200_OK)
+async def withdraw_medical_record_consent(
+    record_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """The record owner (or Admin) withdraws consent - locks the record for review/download."""
+    data = await medical_record_service.withdraw_consent(current_user, record_id)
+    return success_response("Consent withdrawn successfully.", data)
+
+
+@router.post("/uploads/{record_id}/restore-consent", status_code=status.HTTP_200_OK)
+async def restore_medical_record_consent(
+    record_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """The record owner (or Admin) restores previously withdrawn consent."""
+    data = await medical_record_service.restore_consent(current_user, record_id)
+    return success_response("Consent restored successfully.", data)
 
 
 @router.get("/uploads/{record_id}", status_code=status.HTTP_200_OK)

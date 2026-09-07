@@ -19,13 +19,24 @@ optional specialist pathways rather than 3 near-duplicates, matching how
 from datetime import date, datetime, timezone
 
 from beanie import Document, PydanticObjectId
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pymongo import IndexModel
 
 
 def utc_now() -> datetime:
     """Return a timezone-aware UTC timestamp."""
     return datetime.now(timezone.utc)
+
+
+class ChecklistItem(BaseModel):
+    """One real, provider-authored prep item on a session - not auto-populated from
+    other signals (the old Figma mock's checklist items each implied a live status
+    pull, e.g. "Hydration adherence 67%", with no real backing for that kind of
+    per-item auto-status - so this is deliberately a plain label + a manual
+    done/not-done a Nutritionist/MP/Chaplain checks off themselves)."""
+
+    label: str
+    done: bool = False
 
 
 class SpecialistSession(Document):
@@ -42,7 +53,16 @@ class SpecialistSession(Document):
     group_label: str | None = None
     topic: str | None = None
     capacity: int | None = None
-    status: str = "scheduled"  # scheduled | completed | escalated | cancelled | no_show
+    # scheduled | in_progress | completed | escalated | cancelled | no_show
+    status: str = "scheduled"
+    # Real, provider-authored prep checklist - see `ChecklistItem`.
+    prep_checklist: list[ChecklistItem] = Field(default_factory=list)
+    # Real session-duration tracking - set only by the actual `start`/`complete`
+    # actions below, never backfilled. A session completed without ever being
+    # started (e.g. logged after the fact) has no duration, by design - it is
+    # excluded from `get_queue_summary`'s average, not counted as 0 minutes.
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
     created_by: PydanticObjectId
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)

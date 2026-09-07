@@ -12,6 +12,7 @@ REVEAL_REASON_CATEGORIES = ("Routine", "Escalation", "Follow-up", "Audit", "Othe
 class SpecialistNoteCreate(BaseModel):
     """A specialist records a real, lightweight note about an operator."""
 
+    title: str = Field(min_length=1, max_length=120)
     user_concern: str = Field(min_length=1, max_length=1000)
     action_assigned: str | None = Field(default=None, max_length=500)
     follow_up_needed: bool = False
