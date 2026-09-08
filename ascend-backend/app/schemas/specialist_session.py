@@ -18,6 +18,7 @@ class SpecialistSessionCreate(BaseModel):
     group_label: str | None = Field(default=None, max_length=80)
     topic: str | None = Field(default=None, max_length=120)
     capacity: int | None = Field(default=None, gt=0, le=100)
+    planned_duration_minutes: int | None = Field(default=None, gt=0, le=480)
     # Real, provider-authored prep items (labels only - "done" always starts
     # False; see `ChecklistItem`).
     prep_checklist_items: list[str] = Field(default_factory=list, max_length=20)
@@ -60,6 +61,7 @@ class SpecialistSessionResponse(BaseModel):
     topic: str | None
     capacity: int | None
     capacity_pct: float | None
+    planned_duration_minutes: int | None
     status: str
     prep_checklist: list[dict]
     prep_ready: bool

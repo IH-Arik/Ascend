@@ -6,11 +6,13 @@ from app.modules.admin.routes import router as admin_router
 from app.modules.ai_insights.routes import router as ai_insights_router
 from app.modules.assessments.routes import router as assessments_router
 from app.modules.auth.routes import router as auth_router
+from app.modules.chaplain.routes import router as chaplain_router
 from app.modules.checkins.routes import router as checkins_router
 from app.modules.dashboard.routes import router as provider_dashboard_router
 from app.modules.dashboards.routes import router as dashboards_router
 from app.modules.health.routes import router as health_router
 from app.modules.meal_logs.routes import router as meal_logs_router
+from app.modules.mp.routes import router as mp_router
 from app.modules.messaging.routes import router as messaging_router
 from app.modules.notifications.routes import router as notifications_router
 from app.modules.oft.routes import router as oft_router
@@ -49,3 +51,5 @@ api_router.include_router(specialist_notes_router, prefix="/specialist-notes", t
 api_router.include_router(meal_logs_router, prefix="/meal-logs", tags=["meal-logs"])
 api_router.include_router(performance_summaries_router, prefix="/performance-summaries", tags=["performance-summaries"])
 api_router.include_router(reflections_router, prefix="/reflections", tags=["reflections"])
+api_router.include_router(chaplain_router, prefix="/chaplain", tags=["chaplain"])
+api_router.include_router(mp_router, prefix="/mp", tags=["mp"])

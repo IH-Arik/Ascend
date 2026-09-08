@@ -7,6 +7,9 @@ from typing import Any
 from beanie import PydanticObjectId
 from fastapi import HTTPException, status
 
+from datetime import date, datetime, timedelta, timezone
+
+from app.core.anonymize import anonymized_code
 from app.core.roles import ADMIN_ROLES
 from app.models.reflection import Reflection
 from app.models.team_assignment import STATUS_ENABLED, TeamAssignment
@@ -15,6 +18,12 @@ from app.schemas.reflection import ReflectionCreate
 from app.services.audit_log_service import AuditLogService
 
 CHAPLAIN_PATHWAY_KEY = "Chaplain"
+
+# Derived, not stored - a real display cue from the real theme enum, same
+# "derive a label from a real field" pattern used elsewhere this session
+# (e.g. PT/IM Priority from severity_level). "Grief" reads as needing a
+# gentler touch than the others; nothing here is a clinical judgment.
+TENDER_THEMES = {"Grief"}
 
 
 class ReflectionService:
@@ -70,6 +79,73 @@ class ReflectionService:
         )
         return {"reflections": [self._serialize(r) for r in records]}
 
+    async def list_for_caseload(
+        self,
+        chaplain: User,
+        theme: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> dict[str, Any]:
+        """Real reflections across every currently-opted-in caseload member, filterable
+        by theme and date range - the Chaplain dashboard's "Spiritual reflection
+        entries" list. Never includes an opted-out member's entries, even if the
+        date/theme filters would otherwise match them.
+        """
+        assignments = await TeamAssignment.find(
+            TeamAssignment.pathway_key == CHAPLAIN_PATHWAY_KEY,
+            TeamAssignment.provider_user_id == chaplain.id,
+            TeamAssignment.status == STATUS_ENABLED,
+        ).to_list()
+        user_ids = [a.user_id for a in assignments]
+        if not user_ids:
+            return {"reflections": []}
+
+        records = await Reflection.find({"user_id": {"$in": user_ids}}).to_list()
+        if theme:
+            records = [r for r in records if r.theme == theme]
+        if date_from:
+            records = [r for r in records if r.created_at.date() >= date_from]
+        if date_to:
+            records = [r for r in records if r.created_at.date() <= date_to]
+        records.sort(key=lambda item: item.created_at, reverse=True)
+
+        await self.audit_log_service.record(
+            event_type="reflections_viewed",
+            actor_id=chaplain.id,
+            actor_role=chaplain.role,
+            target_entity_type="reflection_log",
+            target_entity_id="caseload",
+            summary_message=f"{chaplain.role} viewed caseload reflection entries.",
+        )
+        return {"reflections": [self._serialize_caseload_entry(r) for r in records]}
+
+    async def get_theme_breakdown(self, chaplain: User, window_days: int = 30) -> dict[str, Any]:
+        """Real per-theme entry counts across the caseload's active reflections this window."""
+        assignments = await TeamAssignment.find(
+            TeamAssignment.pathway_key == CHAPLAIN_PATHWAY_KEY,
+            TeamAssignment.provider_user_id == chaplain.id,
+            TeamAssignment.status == STATUS_ENABLED,
+        ).to_list()
+        user_ids = [a.user_id for a in assignments]
+        cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+        records = (
+            await Reflection.find({"user_id": {"$in": user_ids}, "created_at": {"$gte": cutoff}}).to_list()
+            if user_ids
+            else []
+        )
+        counts: dict[str, int] = {}
+        for record in records:
+            counts[record.theme] = counts.get(record.theme, 0) + 1
+        themes = [{"theme": theme, "count": count} for theme, count in sorted(counts.items(), key=lambda kv: -kv[1])]
+        return {"window_days": window_days, "total_entries": len(records), "themes": themes}
+
+    def _serialize_caseload_entry(self, record: Reflection) -> dict[str, Any]:
+        return {
+            **self._serialize(record),
+            "airman_code": anonymized_code(record.user_id),
+            "flag": "tender" if record.theme in TENDER_THEMES else "pastoral",
+        }
+
     async def _is_opted_in(self, user_id: PydanticObjectId) -> bool:
         assignment = await TeamAssignment.find_one(
             TeamAssignment.user_id == user_id, TeamAssignment.pathway_key == CHAPLAIN_PATHWAY_KEY
@@ -82,5 +158,6 @@ class ReflectionService:
             "theme": record.theme,
             "body": record.body,
             "length_chars": len(record.body),
+            "word_count": len(record.body.split()),
             "created_at": record.created_at.isoformat(),
         }

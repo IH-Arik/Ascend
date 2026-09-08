@@ -45,6 +45,7 @@ class SpecialistNoteService:
             user_concern=payload.user_concern,
             action_assigned=payload.action_assigned,
             follow_up_needed=payload.follow_up_needed,
+            follow_up_due_date=payload.follow_up_due_date,
             note_type=payload.note_type,
             escalated=payload.escalated,
         )
@@ -213,6 +214,7 @@ class SpecialistNoteService:
             "user_concern": REDACTED_PLACEHOLDER if is_redacted else record.user_concern,
             "action_assigned": REDACTED_PLACEHOLDER if is_redacted and record.action_assigned else record.action_assigned,
             "follow_up_needed": record.follow_up_needed,
+            "follow_up_due_date": record.follow_up_due_date.isoformat() if record.follow_up_due_date else None,
             "status": record.status,
             "documentation_status": record.documentation_status,
             "signed_at": record.signed_at.isoformat() if record.signed_at else None,

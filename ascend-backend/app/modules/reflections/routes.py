@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import get_current_user, require_roles
@@ -32,6 +34,28 @@ async def list_own_reflections(
     """The operator's own reflection entries, most recent first."""
     data = await reflection_service.list_own(current_user)
     return success_response("Reflections loaded successfully.", data)
+
+
+@router.get("/caseload", status_code=status.HTTP_200_OK)
+async def list_caseload_reflections(
+    theme: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_CHAPLAIN)),
+) -> dict[str, Any]:
+    """Real reflections across every currently-opted-in caseload member, filterable."""
+    data = await reflection_service.list_for_caseload(current_user, theme, date_from, date_to)
+    return success_response("Caseload reflections loaded successfully.", data)
+
+
+@router.get("/caseload/theme-breakdown", status_code=status.HTTP_200_OK)
+async def get_caseload_theme_breakdown(
+    window_days: int = 30,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_CHAPLAIN)),
+) -> dict[str, Any]:
+    """Real per-theme entry counts across the caseload's active reflections."""
+    data = await reflection_service.get_theme_breakdown(current_user, window_days)
+    return success_response("Theme breakdown loaded successfully.", data)
 
 
 @router.get("/{user_id}", status_code=status.HTTP_200_OK)

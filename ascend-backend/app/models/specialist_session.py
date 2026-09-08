@@ -53,6 +53,11 @@ class SpecialistSession(Document):
     group_label: str | None = None
     topic: str | None = None
     capacity: int | None = None
+    # Real, provider-set planned length at scheduling time - distinct from
+    # `duration_minutes` (derived only after a session actually starts/ends).
+    # Added for the Chaplain "Pastoral care today" schedule, which shows a
+    # planned length for sessions that have not happened yet.
+    planned_duration_minutes: int | None = None
     # scheduled | in_progress | completed | escalated | cancelled | no_show
     status: str = "scheduled"
     # Real, provider-authored prep checklist - see `ChecklistItem`.

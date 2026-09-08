@@ -51,6 +51,11 @@ class SpecialistNote(Document):
     user_concern: str
     action_assigned: str | None = None
     follow_up_needed: bool = False
+    # Real, added 2026-09-08 - the MP dashboard mock's "Follow-ups due"
+    # metric ("2 due today - 2 this week") had no date to actually compute
+    # against; `follow_up_needed` alone can't distinguish "due today" from
+    # "due next month". Optional so existing/older notes stay valid.
+    follow_up_due_date: date | None = None
     status: str = "open"
     # Real, added 2026-09-01 - the MP dashboard mock's Notes tab showed a
     # note "Type" (Intake/Follow-up) and an "Escalation" flag with no real

@@ -1,5 +1,7 @@
 """Specialist note schema (DOCX Section 17 - see model docstring)."""
 
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 from app.models.specialist_note import NOTE_TYPES, STATUSES
@@ -16,6 +18,7 @@ class SpecialistNoteCreate(BaseModel):
     user_concern: str = Field(min_length=1, max_length=1000)
     action_assigned: str | None = Field(default=None, max_length=500)
     follow_up_needed: bool = False
+    follow_up_due_date: date | None = None
     note_type: str = Field(default="follow_up", pattern="^(" + "|".join(NOTE_TYPES) + ")$")
     escalated: bool = False
 

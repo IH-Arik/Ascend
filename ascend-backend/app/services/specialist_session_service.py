@@ -48,6 +48,7 @@ class SpecialistSessionService:
             group_label=payload.group_label,
             topic=payload.topic,
             capacity=payload.capacity,
+            planned_duration_minutes=payload.planned_duration_minutes,
             prep_checklist=[ChecklistItem(label=label) for label in payload.prep_checklist_items],
             created_by=provider.id,
         )
@@ -258,6 +259,7 @@ class SpecialistSessionService:
             "capacity_pct": (
                 round(attendee_count / record.capacity * 100, 1) if record.capacity else None
             ),
+            "planned_duration_minutes": record.planned_duration_minutes,
             "status": record.status,
             "prep_checklist": [item.model_dump() for item in record.prep_checklist],
             "prep_ready": bool(record.prep_checklist) and all(item.done for item in record.prep_checklist),
