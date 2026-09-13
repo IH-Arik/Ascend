@@ -226,6 +226,19 @@ class RecommendationService:
             return None
         return await self._serialize(record)
 
+    async def list_for_user(self, user_id: Any) -> dict[str, Any]:
+        """Every recommendation ever generated/assigned for a user (any status), newest first.
+
+        Provider-facing (e.g. an SCS reviewing one assigned operator's full
+        plan/coaching history) - unlike `get_active_for_user`, this is not
+        gated to the record's own owner, since the caller is a provider
+        looking at someone else's caseload record. Authorization (is this
+        user really assigned to the calling provider) is the caller's job.
+        """
+        records = await Recommendation.find(Recommendation.user_id == user_id).to_list()
+        records.sort(key=lambda r: r.created_at, reverse=True)
+        return {"recommendations": [await self._serialize(r) for r in records]}
+
     async def dismiss(self, user: User, recommendation_id: str) -> dict[str, Any]:
         """Dismiss an active recommendation."""
         record = await self._get_owned(user, recommendation_id)

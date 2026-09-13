@@ -22,6 +22,8 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from fastapi import HTTPException, status
+
 from app.core.recommendation_rules import COMPONENT_PRIORITY_ORDER
 from app.core.security import utc_now
 from app.core.roles import (
@@ -42,6 +44,7 @@ from app.models.meal_log import MealLog
 from app.models.medical_record import MedicalRecord
 from app.models.oft_record import OFTRecord
 from app.models.onboarding_answer import OnboardingAnswer
+from app.models.ops_snapshot import OpsSnapshot
 from app.models.org_unit import OrgUnit
 from app.models.recommendation import Recommendation
 from app.models.report_export import ReportExport
@@ -51,15 +54,33 @@ from app.models.team_assignment import TeamAssignment
 from app.models.user import User
 from app.models.workout_log import WorkoutLog
 from app.services.admin_confirmation_service import AdminConfirmationService
+from app.services.audit_log_service import AuditLogService
 from app.services.credential_service import CredentialService
 from app.services.medical_record_service import MedicalRecordService
 from app.services.oft_service import OFTService
 from app.services.profile_service import compute_age, compute_bmi
 from app.services.reconditioning_service import ReconditioningService
+from app.services.recommendation_service import RecommendationService
 from app.services.reports_service import ReportsService
+from app.services.restriction_service import RestrictionService
 from app.services.role_admin_service import RoleAdminService
 from app.services.specialist_note_service import SpecialistNoteService
 from app.services.utilization_service import UtilizationService
+
+# Recent-activity window on the SCS operator-detail panel - small and fixed,
+# same reasoning as RECENT_WORKOUTS_WINDOW below (a detail panel, not a
+# full audit browser).
+OPERATOR_DETAIL_ACTIVITY_WINDOW = 7
+OPERATOR_DETAIL_WORKOUTS_WINDOW = 7
+# All 5 real component-score keys (`COMPONENT_PRIORITY_ORDER`) - the SCS
+# operator-detail panel shows every one it's authorized to see (per the
+# same real `visible_components` scope config `_build_scs_row` already
+# enforces), not just the 2 the summary caseload row surfaces.
+OPERATOR_DETAIL_COMPONENT_GATE_REASON = {
+    "Mental Readiness": "MP-authorized pathway data - not visible to SCS until authorized.",
+    "Spiritual Readiness": "Chaplain-consent pathway data - not visible to SCS until authorized.",
+    "Nutritional Readiness": "Nutritionist-pathway data - not visible to SCS until authorized.",
+}
 
 LOW_OPS_THRESHOLD = 55.0
 RECENT_WORKOUTS_WINDOW = 5
@@ -134,6 +155,9 @@ class ProviderDashboardService:
         self.role_admin_service = RoleAdminService()
         self.medical_record_service = MedicalRecordService()
         self.specialist_note_service = SpecialistNoteService()
+        self.recommendation_service = RecommendationService()
+        self.restriction_service = RestrictionService()
+        self.audit_log_service = AuditLogService()
 
     async def get_scs_dashboard(self, provider: User) -> dict[str, Any]:
         """SCS Dashboard - who checked in, low OPS, missed workouts, referral/reconditioning need.
@@ -246,6 +270,105 @@ class ProviderDashboardService:
             # isn't one. Not a fabricated per-component chip.
             "driver_flag": active_recommendation.route_level if active_recommendation else None,
             "ptim_referral_status": ptim_referral,
+        }
+
+    async def get_scs_operator_detail(self, provider: User, user_id: str) -> dict[str, Any]:
+        """One assigned operator's full real detail (SCS "Active Profile" drill-in).
+
+        Reuses `_assigned_user_ids` for the same real "is this operator
+        actually on this SCS's caseload" check `get_scs_dashboard` already
+        enforces - an Admin/Superadmin may open any operator, a real SCS
+        only their own assignment. Every section below is sourced from an
+        existing real model/service already used elsewhere in this
+        codebase; nothing here is a new tracked concept invented for this
+        panel (see the old mock's fabricated fields this replaces:
+        `docs/DASHBOARD-AUDIT.md`-adjacent SCS findings this session).
+        """
+        is_admin_view = provider.role in ADMIN_ROLES
+        if not is_admin_view:
+            assigned_ids = await self._assigned_user_ids(provider.id, "SCS")
+            if user_id not in {str(uid) for uid in assigned_ids}:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This operator is not on your caseload.",
+                )
+
+        user = await User.get(user_id)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+        scope_config = await self.role_admin_service.get_scope_config(provider.role if not is_admin_view else ROLE_SCS)
+        visible_components = scope_config["visible_components"]
+        today = date.today()
+
+        component_scores: dict[str, dict[str, Any]] = {}
+        for component in COMPONENT_PRIORITY_ORDER:
+            visible = component in visible_components
+            component_scores[component] = {
+                "value": (user.current_component_scores or {}).get(component) if visible else None,
+                "visible": visible,
+                "gated_reason": None if visible else OPERATOR_DETAIL_COMPONENT_GATE_REASON.get(component),
+            }
+
+        (
+            checked_in_today,
+            recent_workouts,
+            oft_status,
+            reconditioning,
+            restrictions,
+            recommendations,
+            recent_activity,
+            ops_snapshots,
+        ) = await asyncio.gather(
+            CheckinAnswer.find_one(
+                CheckinAnswer.user_id == user.id,
+                CheckinAnswer.cadence == "daily",
+                CheckinAnswer.checkin_date == today,
+            ),
+            WorkoutLog.find(WorkoutLog.user_id == user.id).to_list(),
+            self.oft_service.get_status_for_user(user),
+            self.reconditioning_service.get_timeline(user.id),
+            self.restriction_service.list_for_user(user.id),
+            self.recommendation_service.list_for_user(user.id),
+            self.audit_log_service.list_for_target("user", str(user.id), limit=OPERATOR_DETAIL_ACTIVITY_WINDOW),
+            OpsSnapshot.find(
+                OpsSnapshot.user_id == user.id, OpsSnapshot.snapshot_date >= today - timedelta(days=28)
+            ).to_list(),
+        )
+        recent_workouts.sort(key=lambda w: w.activity_date, reverse=True)
+        recent_workouts = recent_workouts[:OPERATOR_DETAIL_WORKOUTS_WINDOW]
+        ops_snapshots.sort(key=lambda s: s.snapshot_date)
+
+        ptim_referral = await self._latest_request_status(user.id, "PT/IM")
+
+        return {
+            "user_id": str(user.id),
+            "user_name": user.full_name,
+            "current_ops_score": user.current_ops_score,
+            "current_ops_band": user.current_ops_band,
+            "checked_in_today": checked_in_today is not None,
+            "oft": oft_status,
+            "component_scores": component_scores,
+            "reconditioning_timeline": reconditioning["events"],
+            "restrictions": restrictions["restrictions"],
+            "ptim_referral_status": ptim_referral,
+            "recommendations": recommendations["recommendations"],
+            "recent_activity": recent_activity,
+            "ops_score_trend_28d": [
+                {"date": s.snapshot_date.isoformat(), "ops_score": s.ops_score} for s in ops_snapshots
+            ],
+            "recent_workouts": [
+                {
+                    "activity_date": w.activity_date.isoformat(),
+                    "activity_type": w.custom_title or w.activity_type,
+                    "duration_minutes": w.duration_minutes,
+                    "intensity": w.intensity,
+                    "completion_status": w.completion_status,
+                    "reported_limitation": w.reported_limitation,
+                    "notes": w.notes,
+                }
+                for w in recent_workouts
+            ],
         }
 
     async def get_ptim_dashboard(self, provider: User) -> dict[str, Any]:

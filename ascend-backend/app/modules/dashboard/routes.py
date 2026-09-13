@@ -63,6 +63,16 @@ async def get_scs_dashboard(
     return success_response("SCS dashboard loaded successfully.", data)
 
 
+@router.get("/scs/operators/{user_id}", status_code=status.HTTP_200_OK)
+async def get_scs_operator_detail(
+    user_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_SCS)),
+) -> dict[str, Any]:
+    """SCS "Active Profile" drill-in - one assigned operator's full real detail."""
+    data = await provider_dashboard_service.get_scs_operator_detail(current_user, user_id)
+    return success_response("Operator detail loaded successfully.", data)
+
+
 @router.get("/ptim", status_code=status.HTTP_200_OK)
 async def get_ptim_dashboard(
     current_user: User = Depends(require_roles(*ADMIN_ROLES, ROLE_PTIM)),

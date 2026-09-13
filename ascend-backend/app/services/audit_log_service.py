@@ -94,6 +94,31 @@ class AuditLogService:
         await record.insert()
         return record
 
+    async def list_for_target(
+        self, target_entity_type: str, target_entity_id: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Real recent audit events for one specific target entity (e.g. a single user).
+
+        Not a general-purpose listing endpoint - callers embed this inside a
+        narrower, already-authorized view (e.g. a provider's own-caseload
+        operator detail), not a standalone route, so this never widens who
+        can browse the audit log at large.
+        """
+        records = await AuditLog.find(
+            AuditLog.target_entity_type == target_entity_type,
+            AuditLog.target_entity_id == target_entity_id,
+        ).to_list()
+        records.sort(key=lambda r: r.created_at, reverse=True)
+        return [
+            {
+                "event_type": r.event_type,
+                "actor_role": r.actor_role,
+                "summary_message": r.summary_message,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in records[:limit]
+        ]
+
     async def open_event(
         self, actor: User, target_entity_type: str, target_entity_id: str, summary_message: str
     ) -> AuditLog:
