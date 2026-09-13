@@ -551,11 +551,18 @@ class ProviderDashboardService:
         if user is None:
             return None
 
+        mental_signals = None
         if pathway_key == ROLE_NUTRITIONIST:
             active_recommendation, nutrition_signals = await asyncio.gather(
                 self._active_recommendation(user_id, specialist_route=pathway_key),
                 self._build_nutrition_signals(user_id, today),
             )
+        elif pathway_key == ROLE_MENTAL_PERFORMANCE:
+            active_recommendation, mental_signals = await asyncio.gather(
+                self._active_recommendation(user_id, specialist_route=pathway_key),
+                self._build_mental_signals(user_id, today),
+            )
+            nutrition_signals = None
         else:
             active_recommendation = await self._active_recommendation(user_id, specialist_route=pathway_key)
             nutrition_signals = None
@@ -582,6 +589,8 @@ class ProviderDashboardService:
             row["height_in"] = user.height_in
             row["weight_lb"] = user.weight_lb
             row["bmi"] = compute_bmi(user.height_in, user.weight_lb)
+        elif pathway_key == ROLE_MENTAL_PERFORMANCE:
+            row["mental_signals"] = mental_signals
         return row
 
     async def _build_nutrition_signals(self, user_id: Any, today: date) -> dict[str, Any]:
@@ -616,6 +625,39 @@ class ProviderDashboardService:
             "hydration_energy_trend": trend_for("w_04") or trend_for("d0_04"),
             "skipped_meals_or_low_hydration_flags_60d": len(flagged),
             "checkins_logged_60d": len({a.checkin_date for a in answers}),
+        }
+
+    async def _build_mental_signals(self, user_id: Any, today: date) -> dict[str, Any]:
+        """Real per-operator MP trend flag + check-in count (DOCX Section 11:
+        "who was flagged by trends" / "relevant check-ins").
+
+        Same real query-then-first-vs-last-delta pattern as
+        `_build_nutrition_signals`, applied per-driver to
+        `MENTAL_DRIVER_QUESTION_CODES` instead of a cohort aggregate -
+        this dashboard already had the aggregate version
+        (`get_mental_driver_scores`); this is the missing per-operator one.
+        """
+        cutoff = today - timedelta(days=MENTAL_DRIVER_WINDOW_DAYS)
+        all_codes = {code for codes in MENTAL_DRIVER_QUESTION_CODES.values() for code in codes}
+        answers = await CheckinAnswer.find(
+            CheckinAnswer.user_id == user_id, CheckinAnswer.checkin_date >= cutoff
+        ).to_list()
+        answers = [a for a in answers if a.question_code in all_codes]
+
+        declining_drivers: list[str] = []
+        for driver, codes in MENTAL_DRIVER_QUESTION_CODES.items():
+            series = sorted(
+                (a for a in answers if a.question_code in codes), key=lambda a: a.checkin_date
+            )
+            if len(series) < 2:
+                continue
+            delta = (series[-1].numeric_score_100 or 0) - (series[0].numeric_score_100 or 0)
+            if delta < 0:
+                declining_drivers.append(driver)
+
+        return {
+            "declining_drivers": declining_drivers,
+            "checkins_logged_28d": len({a.checkin_date for a in answers}),
         }
 
     async def get_mental_driver_scores(self, provider: User) -> dict[str, Any]:
