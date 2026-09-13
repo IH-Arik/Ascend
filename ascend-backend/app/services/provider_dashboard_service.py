@@ -447,6 +447,15 @@ class ProviderDashboardService:
             "rehab_strategy_summary": reconditioning.get("rehab_strategy_summary"),
             "sessions_completed": reconditioning.get("sessions_completed"),
             "sessions_total": reconditioning.get("sessions_total"),
+            # Real 4-field RTD gate (DOCX: "RTD requires source-authority +
+            # decision date + verification + reevaluation/expiration") -
+            # fetched but never returned by this row before, so the
+            # dashboard could only ever show the SCS-owned RTP status.
+            "rtd_source_authority": reconditioning.get("rtd_source_authority"),
+            "rtd_decision_date": reconditioning.get("rtd_decision_date"),
+            "rtd_verified": reconditioning.get("rtd_verified"),
+            "rtd_reevaluation_date": reconditioning.get("rtd_reevaluation_date"),
+            "rtd_cleared": reconditioning.get("rtd_cleared"),
         }
 
     async def _flight_name_for_user(self, user: User) -> str | None:
