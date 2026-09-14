@@ -57,6 +57,7 @@ from app.schemas.specialist_session import ChecklistItemToggle, SpecialistSessio
 from app.schemas.pt_session import PTSessionAttendeeAdd, PTSessionCreate, PTSessionUpdate
 from app.schemas.provider_credential import CredentialCreate
 from app.schemas.question_bank_version import QuestionBankVersionCreate
+from app.schemas.base_access_record import BaseAccessRecordUpsert
 from app.schemas.training_compliance import TrainingComplianceUpsert
 from app.schemas.scheduled_export import ScheduledExportCreate, ScheduledExportUpdate
 from app.schemas.recommendation_threshold_config import RecommendationThresholdConfigCreate
@@ -81,6 +82,7 @@ from app.services.org_unit_service import OrgUnitService
 from app.services.provider_dashboard_service import ProviderDashboardService
 from app.services.question_bank_version_service import QuestionBankVersionService
 from app.services.role_admin_service import RoleAdminService
+from app.services.base_access_record_service import BaseAccessRecordService
 from app.services.training_compliance_service import TrainingComplianceService
 from app.services.recommendation_threshold_config_service import (
     RecommendationThresholdConfigService,
@@ -107,6 +109,7 @@ scheduled_export_service = ScheduledExportService()
 provider_dashboard_service = ProviderDashboardService()
 role_admin_service = RoleAdminService()
 training_compliance_service = TrainingComplianceService()
+base_access_record_service = BaseAccessRecordService()
 credential_service = CredentialService()
 equipment_gap_service = EquipmentGapService()
 utilization_service = UtilizationService()
@@ -933,6 +936,91 @@ async def upsert_training_compliance(
 ):
     data = await training_compliance_service.upsert(current_user, user_id, payload)
     return success_response("Training compliance item recorded successfully.", data)
+
+
+# --- Base Access / Badge / Pass (DOCX Section 14 Compliance Item) ---
+
+
+@router.get("/base-access/summary", summary="Real org-wide base access/badge/pass status")
+async def get_base_access_summary(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    data = await base_access_record_service.get_summary()
+    return success_response("Base access summary loaded successfully.", data)
+
+
+@router.get("/base-access/{user_id}", summary="List one staff member's base access items")
+async def list_base_access(
+    user_id: str,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    data = await base_access_record_service.list_for_user(user_id)
+    return success_response("Base access items loaded successfully.", data)
+
+
+@router.put("/base-access/{user_id}", summary="Admin records or updates one staff member's base access item")
+async def upsert_base_access(
+    user_id: str,
+    payload: BaseAccessRecordUpsert,
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    data = await base_access_record_service.upsert(current_user, user_id, payload)
+    return success_response("Base access item recorded successfully.", data)
+
+
+# --- Remaining Compliance Tracker items (DOCX Section 14): Medical Record
+# Upload/Access Governance, Check-In-to-Plan Mapping, First-Use Workflow.
+# Each reuses an existing real data source rather than a new model - see
+# each field's comment below for exactly which.
+
+
+@router.get("/compliance-tracker/extras", summary="Real Medical Record Governance / Check-In-to-Plan / First-Use tracker rows")
+async def get_compliance_tracker_extras(
+    current_user: User = Depends(require_roles(*ADMIN_ROLES)),
+):
+    # Same real report builder the "Medical Records Upload and Access Audit
+    # Report" export uses (DOCX Table 26, report #8) - reused here as a
+    # compact tracker row rather than duplicating the aggregation.
+    medical_record_governance = await reports_service.get_medical_records_audit_report(days=90)
+
+    # Real registry over the 4 question banks - every question already
+    # carries a real `readiness_component`/routing mapping, which *is* the
+    # DOCX Compliance Item's "Check-In-to-Plan Mapping" concept.
+    question_registry = build_question_registry()
+
+    # Real onboarding/day-0 fields already on `User` (DOCX: "First-Use
+    # Workflow" fields account_provisioned_status/onboarding_status/
+    # day0_daily_checkin_status/...).
+    all_users = await User.find().to_list()
+    onboarding_completed_count = sum(1 for u in all_users if u.onboarding_completed)
+    day0_checkin_done_count = sum(1 for u in all_users if u.day0_daily_checkin_status == "completed")
+
+    return success_response(
+        "Compliance tracker extras loaded successfully.",
+        {
+            "medical_record_governance": {
+                "window_days": medical_record_governance["window_days"],
+                "documents_uploaded": medical_record_governance["documents_uploaded"],
+                "unresolved_review_count": medical_record_governance["unresolved_review_count"],
+                "retention_expiring_30d_count": medical_record_governance["retention_expiring_30d_count"],
+                # DOCX also names malware_scan_status/audit_log_status as
+                # required fields - neither is tracked anywhere in this
+                # backend (no scanning integration, no per-record read log
+                # beyond MedicalRecordAccessEvent's action list already
+                # counted above as access_event_count) - omitted, not
+                # fabricated.
+                "access_event_count": medical_record_governance["access_event_count"],
+            },
+            "check_in_to_plan_mapping": {
+                "total_questions_mapped": question_registry["total_questions"],
+            },
+            "first_use_workflow": {
+                "total_users": len(all_users),
+                "onboarding_completed_count": onboarding_completed_count,
+                "day0_checkin_done_count": day0_checkin_done_count,
+            },
+        },
+    )
 
 
 # --- Equipment and Supply Gap Tracker (DOCX 8.7) ---

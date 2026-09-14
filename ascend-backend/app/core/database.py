@@ -13,6 +13,7 @@ from app.models import AppSetting
 from app.models import AIInsight
 from app.models import Assessment
 from app.models import AuditLog
+from app.models import BaseAccessRecord
 from app.models import Briefing
 from app.models import CheckinAnswer
 from app.models import CoordinationItem
@@ -122,6 +123,7 @@ async def init_db() -> None:
                     AuditLog,
                     TeamAssignment,
                     TrainingCompliance,
+                    BaseAccessRecord,
                     DeactivationRequest,
                     ReconditioningPlan,
                     MedicalRecord,
@@ -182,6 +184,7 @@ async def init_db() -> None:
                         AuditLog,
                         TeamAssignment,
                         TrainingCompliance,
+                        BaseAccessRecord,
                         DeactivationRequest,
                         ReconditioningPlan,
                         MedicalRecord,

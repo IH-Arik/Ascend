@@ -42,6 +42,7 @@ from app.models.scheduled_export import ScheduledExport
 from app.models.scheduler_job_run import SchedulerJobRun
 from app.models.scoring_config import ScoringConfig
 from app.models.performance_summary import PerformanceSummary
+from app.models.base_access_record import BaseAccessRecord
 from app.models.ptim_recommendation import PtimRecommendation
 from app.models.question_bank_version import QuestionBankVersion
 from app.models.specialist_note import SpecialistNote
@@ -57,6 +58,7 @@ __all__ = [
     "AIInsight",
     "Assessment",
     "AuditLog",
+    "BaseAccessRecord",
     "Briefing",
     "CheckinAnswer",
     "CoordinationItem",
