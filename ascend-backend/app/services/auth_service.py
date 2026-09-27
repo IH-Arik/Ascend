@@ -5,12 +5,13 @@ import logging
 import secrets
 from typing import Any
 
+import httpx
 from fastapi import HTTPException, status
 from beanie.exceptions import CollectionWasNotInitialized
 from pymongo.errors import PyMongoError
 
 from app.core.config import get_settings
-from app.core.roles import ROLE_SUPERADMIN, normalize_role
+from app.core.roles import ROLE_AIRMAN, ROLE_SUPERADMIN, normalize_role
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -42,6 +43,7 @@ REMEMBER_ME_REFRESH_MULTIPLIER = 2
 # Not DOCX-sourced (see `app/models/user.py`) - own reasonable default,
 # the DOCX does not specify an access-review cadence.
 ACCESS_EXPIRY_DAYS = 365
+GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 logger = logging.getLogger(__name__)
 
 
@@ -170,6 +172,88 @@ class AuthService:
                 detail="Database is temporarily unavailable. Please try again shortly.",
             ) from exc
         return self._build_token_response(user, remember_me=payload.remember_me)
+
+    async def google_login(
+        self,
+        id_token: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict[str, Any]:
+        """Verify a Google ID token, then log in (or create) the matching user."""
+        allowed = {
+            cid.strip()
+            for cid in get_settings().google_client_ids.split(",")
+            if cid.strip()
+        }
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Google sign-in is not configured.",
+            )
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(GOOGLE_TOKENINFO_URL, params={"id_token": id_token})
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Could not reach Google to verify the sign-in. Please try again.",
+            ) from exc
+        info = response.json() if response.status_code == 200 else {}
+        email = str(info.get("email", "")).lower()
+        if (
+            not email
+            or info.get("aud") not in allowed
+            or str(info.get("email_verified", "")).lower() != "true"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Google sign-in.",
+            )
+
+        try:
+            user = await User.find_one({"email": email})
+            if user is None:
+                user = User(
+                    email=email,
+                    full_name=str(info.get("name") or email.split("@")[0])[:120],
+                    role=ROLE_AIRMAN,
+                    hashed_password=None,
+                    is_verified=True,
+                    activation_date=utc_now(),
+                    access_expires_at=utc_now() + timedelta(days=ACCESS_EXPIRY_DAYS),
+                )
+                await user.insert()
+            elif not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This account is inactive.",
+                )
+            elif not user.is_verified:
+                user.is_verified = True
+            user.last_login_at = utc_now()
+            user.updated_at = utc_now()
+            await user.save()
+            await self.audit_log_service.record(
+                event_type="login_success",
+                actor_id=user.id,
+                actor_role=user.role,
+                target_entity_type="user",
+                target_entity_id=str(user.id),
+                summary_message="Successful login.",
+                metadata_payload={
+                    "method": "google",
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
+                },
+            )
+        except HTTPException:
+            raise
+        except (PyMongoError, CollectionWasNotInitialized, OSError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database is temporarily unavailable. Please try again shortly.",
+            ) from exc
+        return self._build_token_response(user)
 
     async def refresh_token(self, payload: RefreshRequest) -> dict[str, Any]:
         """Issue a new access token from a valid refresh token."""

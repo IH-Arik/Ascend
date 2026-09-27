@@ -9,6 +9,7 @@ from app.common.utils.responses import success_response
 from app.models.user import User
 from app.schemas.auth import (
     ForgotPasswordRequest,
+    GoogleLoginRequest,
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
@@ -43,6 +44,17 @@ async def login(payload: LoginRequest, request: Request) -> dict[str, Any]:
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     data = await auth_service.login_user(payload, ip_address=ip_address, user_agent=user_agent)
+    return success_response("Login successful.", data)
+
+
+@router.post("/google", status_code=status.HTTP_200_OK)
+async def google_login(payload: GoogleLoginRequest, request: Request) -> dict[str, Any]:
+    """Authenticate with a Google ID token and issue JWT tokens."""
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    data = await auth_service.google_login(
+        payload.id_token, ip_address=ip_address, user_agent=user_agent
+    )
     return success_response("Login successful.", data)
 
 

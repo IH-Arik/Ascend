@@ -18,6 +18,12 @@ def validate_password_strength(value: str) -> str:
     return value
 
 
+class GoogleLoginRequest(BaseModel):
+    """Sign in (or sign up) with a Google ID token."""
+
+    id_token: str = Field(min_length=20)
+
+
 class RegisterRequest(BaseModel):
     """Register a new user account."""
 

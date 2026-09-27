@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     gmail_client_id: str = Field(default="", alias="GMAIL_CLIENT_ID")
     gmail_client_secret: str = Field(default="", alias="GMAIL_CLIENT_SECRET")
     gmail_refresh_token: str = Field(default="", alias="GMAIL_REFRESH_TOKEN")
+    google_client_ids: str = Field(default="", alias="GOOGLE_CLIENT_IDS")
     support_email: str = Field(default="", alias="SUPPORT_EMAIL")
     support_phone: str = Field(default="", alias="SUPPORT_PHONE")
     help_center_url: str = Field(default="", alias="HELP_CENTER_URL")
