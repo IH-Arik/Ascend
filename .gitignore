@@ -2,10 +2,10 @@
 wellness-backend/
 ascend-admin-637dab234594b94ee7e7cad1fa71fc421d35b7bc/
 ascend-app/
+ascend-app-mohammad/
+dashboard-screenshots/*mp*.png
 
 # Environment & Secrets
-.env
-.env.*
 !.env.example
 *.env
 env/
@@ -56,3 +56,5 @@ branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
 .gitignore
+config.bat
+node_modules
